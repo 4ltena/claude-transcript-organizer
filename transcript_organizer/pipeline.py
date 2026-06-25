@@ -22,8 +22,14 @@ def _date() -> str:
     return time.strftime("%Y-%m-%d")
 
 
+def _ev(event: str, cid: str, detail: str = "") -> str:
+    """Format one English trace line as `HH:MM:SS · event · id · detail`."""
+    line = f"{time.strftime('%H:%M:%S')} · {event:<7} · {cid}"
+    return f"{line} · {detail}" if detail else line
+
+
 def organize(config, provider, only_label=None, rebuild=False,
-             dry_run=False, now_epoch=None, log=None) -> dict:
+             dry_run=False, now_epoch=None, log=None, progress=None) -> dict:
     """Discover, condense, classify, extract, and render all unprocessed conversations.
 
     Args:
@@ -33,15 +39,18 @@ def organize(config, provider, only_label=None, rebuild=False,
         rebuild: If True, ignore the ledger and reprocess already-marked sessions.
         dry_run: If True, perform discover/route only — nothing is written.
         now_epoch: Override for current time (float seconds since epoch).
-        log: Optional callable(str). If given, emits a per-conversation trace
-            (read → condense → classify → route → extract). Already-processed
-            (ledger) and protected sessions are counted only, not traced.
+        log: Optional callable(str). If given, emits a per-conversation English
+            trace line (read / route / extract / skip / handoff) in the form
+            `HH:MM:SS · event · id · detail`.
+        progress: Optional callable(done, total). Called once per scanned
+            transcript so a caller can render a progress bar / remaining count.
 
     Returns:
         dict with keys: processed, skipped, added, handoffs.
     """
     now_epoch = now_epoch if now_epoch is not None else time.time()
     emit = log if callable(log) else (lambda _msg: None)
+    prog = progress if callable(progress) else (lambda _d, _t: None)
     ledger = Ledger(os.path.join(config.data_dir, "ledger.json"))
     store = FindingStore(config.data_dir)
     protect = current_protect(config)
@@ -52,57 +61,53 @@ def organize(config, provider, only_label=None, rebuild=False,
     def bump(flag: str) -> None:
         skipped[flag] = skipped.get(flag, 0) + 1
 
-    for meta in iter_conversations(config):
+    metas = list(iter_conversations(config))
+    total = len(metas)
+    for idx, meta in enumerate(metas, 1):
         if meta.sid in protect:
-            bump("protected")
-            continue
+            bump("protected"); prog(idx, total); continue
         if not rebuild and ledger.is_processed(meta.sid):
-            bump("ledger")
-            continue
+            bump("ledger"); prog(idx, total); continue
         cd = condense(meta.path, config.condense_cap)
         truncated = "…[中略" in cd.body
-        emit(f"[読込] {meta.basename} (sid={meta.sid[:8]}…)")
-        emit(f"  凝縮: title={cd.title or '(無題)'!r} cwd={cd.cwd} "
-             f"msgs={cd.nmsg} chars={len(cd.body)}"
-             f"{' 切詰あり(頭60%+尾40%)' if truncated else ''}")
+        emit(_ev("read", meta.sid,
+                 f'title={cd.title or "(untitled)"!r} cwd={cd.cwd} '
+                 f'msgs={cd.nmsg} chars={len(cd.body)}'
+                 f'{" truncated(head60%/tail40%)" if truncated else ""}'))
         flags = classify(meta, cd.body, config, now_epoch)
         if "active" in flags:
-            emit("  → skip: active（直近活動中で保護）")
-            bump("active")
-            continue
+            emit(_ev("skip", meta.sid, "active (recently active, protected)"))
+            bump("active"); prog(idx, total); continue
         if "sidechain" in flags and not config.include_sidechain:
-            emit("  → skip: sidechain（サブエージェントログ）")
-            bump("sidechain")
-            continue
+            emit(_ev("skip", meta.sid, "sidechain (subagent log)"))
+            bump("sidechain"); prog(idx, total); continue
         if "meta" in flags:
-            emit("  → skip: meta（本ツールの抽出メタ）")
-            bump("meta")
-            continue
+            emit(_ev("skip", meta.sid, "meta (this tool's own output)"))
+            bump("meta"); prog(idx, total); continue
         if "trivial" in flags:
-            emit("  → skip: trivial（中身が薄い）")
-            bump("trivial")
-            continue
+            emit(_ev("skip", meta.sid, "trivial (too little content)"))
+            bump("trivial"); prog(idx, total); continue
         tgt = route(cd.cwd, config)
-        emit(f"  ルート: label={tgt.label} root={tgt.root}")
+        emit(_ev("route", meta.sid, f"label={tgt.label} root={tgt.root}"))
         if only_label and tgt.label != only_label:
-            emit(f"  → skip: other_label（≠ {only_label}）")
-            bump("other_label")
-            continue
+            emit(_ev("skip", meta.sid, f"other_label (!= {only_label})"))
+            bump("other_label"); prog(idx, total); continue
         if dry_run:
-            emit("  → dry-run: 抽出せず（書き込みなし）")
+            emit(_ev("dry-run", meta.sid, "no extraction (read-only)"))
             processed += 1
             touched[tgt.label] = tgt.root
-            continue
+            prog(idx, total); continue
         try:
             findings = extract(cd, provider, tgt.label, config.retries)
         except ExtractionError as e:
-            emit(f"  → 抽出失敗（{config.retries}回再試行後）: {e}")
-            bump("extract_failed")
-            continue
+            emit(_ev("skip", meta.sid,
+                     f"extract_failed after {config.retries} retries: {e}"))
+            bump("extract_failed"); prog(idx, total); continue
         new = store.merge(tgt.label, findings)
         added += new
         kinds = dict(Counter(f.kind for f in findings))
-        emit(f"  抽出: 提案={len(findings)}件 {kinds} 新規={new}件")
+        emit(_ev("extract", meta.sid,
+                 f"proposed={len(findings)} {kinds} new={new}"))
         ledger.mark(meta.sid, {
             "label": tgt.label,
             "convid": meta.sid,
@@ -111,13 +116,14 @@ def organize(config, provider, only_label=None, rebuild=False,
         })
         touched[tgt.label] = tgt.root
         processed += 1
+        prog(idx, total)
 
     handoffs: list[str] = []
     if not dry_run:
         for label, root in touched.items():
             block = render_markdown(store.load(label), label, _date())
             path = update_handoff(root, block)
-            emit(f"[HANDOFF更新] {path}")
+            emit(_ev("handoff", label, path))
             handoffs.append(path)
 
     return {"processed": processed, "skipped": skipped,

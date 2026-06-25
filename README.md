@@ -37,7 +37,7 @@ python cli.py organize
 python cli.py organize --dry-run
 ```
 
-処理の内訳（読込中のトランスクリプト・凝縮結果・分類/ルート判定・抽出した findings）を逐次見たい場合は `--verbose`（`-v`）。トレースは **stderr**、最終サマリは **stdout** に出力されます:
+処理の内訳（読込中のトランスクリプト・分類/ルート判定・抽出した findings）を逐次見たい場合は `--verbose`（`-v`）。トレースは **stderr**、最終サマリは **stdout** に出力されます。各行は英語で `HH:MM:SS · event · id · detail` 形式（event = `read`/`route`/`extract`/`skip`/`dry-run`/`handoff`）。TTY では最下行に残数つき進捗バー（`#` ハッシュ）が固定表示されます。
 
 ```bash
 python cli.py organize --verbose
@@ -46,11 +46,12 @@ python cli.py organize --verbose
 出力例（stderr）:
 
 ```
-[読込] 04520aae-….jsonl (sid=04520aae…)
-  凝縮: title='Review feature design' cwd=… msgs=23 chars=7119
-  ルート: label=my-project root=<PROJECTS>/my-project
-  抽出: 提案=7件 {'decision': 3, 'next_step': 2, 'gotcha': 2} 新規=4件
-[HANDOFF更新] <PROJECTS>/my-project/docs/HANDOFF.md
+02:29:47 · read    · 04520aae-5f96-48f5-99a8-a112de5b2042 · title='Review feature design' cwd=… msgs=23 chars=7119
+02:29:47 · route   · 04520aae-5f96-48f5-99a8-a112de5b2042 · label=my-project root=<PROJECTS>/my-project
+02:29:52 · extract · 04520aae-5f96-48f5-99a8-a112de5b2042 · proposed=7 {'decision': 3, 'next_step': 2, 'gotcha': 2} new=4
+02:30:01 · skip    · 0c059f90-dc2f-4ab3-84d3-5b5f24a059ce · trivial (too little content)
+02:35:10 · handoff · my-project · <PROJECTS>/my-project/docs/HANDOFF.md
+[##############----------]  58.3%  712/1220  remaining 508
 ```
 
 特定プロジェクトだけ対象にする場合:
@@ -105,7 +106,7 @@ python cli.py delete --project my-project --yes
 
 いずれも `.gitignore` 済みで任意。`tstat`/`tsdel` は LLM を使わないため常に Windows 側で実行します。
 
-- **`--verbose`** で会話ごとの処理トレース（読込・凝縮・分類/ルート・抽出）を **stderr** に、最終サマリを **stdout** に出力します。
+- **`--verbose`** で会話ごとの処理トレース（英語 `HH:MM:SS · event · id · detail` 形式＋最下行の進捗バー）を **stderr** に、最終サマリを **stdout** に出力します。
 
 引数はそのまま転送され、末尾が後勝ちのため、その回だけ別プロバイダへ上書きもできます。
 

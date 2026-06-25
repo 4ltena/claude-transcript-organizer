@@ -3,6 +3,52 @@ from transcript_organizer.config import load_config
 from transcript_organizer.providers import get_provider
 from transcript_organizer import pipeline, deleter
 
+
+class _Tracer:
+    """stderr verbose tracer with a sticky bottom progress bar.
+
+    On a TTY the progress bar stays pinned to the bottom line (redrawn with
+    \\r) while trace lines scroll above it. On a non-TTY (piped/redirected)
+    it falls back to emitting a progress line every 25 transcripts.
+    """
+
+    def __init__(self, stream):
+        self.s = stream
+        self.bar_text = ""
+        self._last = 0
+        try:
+            self.tty = stream.isatty()
+        except Exception:
+            self.tty = False
+
+    def line(self, msg):
+        if self.tty and self.bar_text:
+            self.s.write("\r\x1b[K")          # clear the bar
+        self.s.write(msg + "\n")
+        if self.tty and self.bar_text:
+            self.s.write(self.bar_text)       # redraw bar at the bottom
+        self.s.flush()
+
+    def bar(self, done, total):
+        remaining = total - done
+        pct = (done / total * 100.0) if total else 100.0
+        width = 24
+        filled = int(width * done / total) if total else width
+        self.bar_text = (f"[{'#' * filled}{'-' * (width - filled)}] "
+                         f"{pct:5.1f}%  {done}/{total}  remaining {remaining}")
+        if self.tty:
+            self.s.write("\r\x1b[K" + self.bar_text)
+            self.s.flush()
+        elif done == total or done - self._last >= 25:
+            self._last = done
+            self.s.write(self.bar_text + "\n")
+            self.s.flush()
+
+    def close(self):
+        if self.tty and self.bar_text:
+            self.s.write("\n")
+            self.s.flush()
+
 def build_parser():
     p = argparse.ArgumentParser(prog="organize",
                                 description="Claude会話transcriptを整理しHANDOFFを更新する")
@@ -26,9 +72,13 @@ def main(argv=None) -> int:
         if args.provider:
             cfg.provider = args.provider
         prov = get_provider(cfg)
-        logfn = (lambda m: print(m, file=sys.stderr)) if args.verbose else None
+        tracer = _Tracer(sys.stderr) if args.verbose else None
         r = pipeline.organize(cfg, prov, only_label=args.project,
-                              rebuild=args.rebuild, dry_run=args.dry_run, log=logfn)
+                              rebuild=args.rebuild, dry_run=args.dry_run,
+                              log=(tracer.line if tracer else None),
+                              progress=(tracer.bar if tracer else None))
+        if tracer:
+            tracer.close()
         print(f"処理: {r['processed']}件 / 新規finding: {r['added']}件 / "
               f"スキップ: {r['skipped']} / HANDOFF更新: {len(r['handoffs'])}件")
         if args.dry_run:
