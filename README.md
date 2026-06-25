@@ -98,15 +98,19 @@ python cli.py delete --project my-project --yes
 | `tstat` | `python cli.py status` |
 | `tsdel` | `python cli.py delete` |
 
-`tsorg` は `--config config.local.json` と `--verbose` を既定で付与します。
+`tsorg` は `--verbose` を既定で付与し、リポジトリ直下の設定ファイルの有無で実行先を切り替えます（アダプティブ）。
 
-- **`config.local.json`**（`.gitignore` 済み・任意）に環境固有の設定を書けます。存在すればそれが使われ、無ければ既定値にフォールバックします。ローカル LLM をデフォルトにしたい場合は、このファイルに `"provider": "ollama"` と `providers.ollama.model` を設定してください（例: WSL/ローカルの ollama を `http://localhost:11434` で利用）。
+- **`config.wsl.json` が存在する場合 → WSL 内で実行**（`wsl python3 cli.py …`）。ローカル LLM を WSL 上の ollama で動かす構成向け。Windows⇄WSL 境界越しの HTTP POST は連続実行で不安定なため、ツール自体を WSL 内で動かし**ネイティブ localhost**で ollama を叩きます。
+- **無い場合 → Windows の python で実行**し、`config.local.json`（あれば）を読みます。
+
+いずれも `.gitignore` 済みで任意。`tstat`/`tsdel` は LLM を使わないため常に Windows 側で実行します。
+
 - **`--verbose`** で会話ごとの処理トレース（読込・凝縮・分類/ルート・抽出）を **stderr** に、最終サマリを **stdout** に出力します。
 
 引数はそのまま転送され、末尾が後勝ちのため、その回だけ別プロバイダへ上書きもできます。
 
 ```bat
-tsorg                              ← config.local.json の provider で実行
+tsorg                              ← config.(wsl|local).json の provider で実行
 tsorg --dry-run
 tsorg --provider anthropic         ← その回だけ上書き
 tsorg --project my-project
@@ -114,6 +118,25 @@ tstat
 tsdel
 tsdel --yes
 ```
+
+#### WSL 上の ollama を使う場合（`config.wsl.json`）
+
+WSL（例: AlmaLinux）の ollama をローカル LLM として使う構成例。パスは **WSL 視点(posix)** で書き、Windows パスで記録された会話 `cwd` は `aliases` で `/mnt/...` に読み替えます。`think:false` は思考モデル（gemma/qwen3 等）の冗長な thinking 出力を抑止します（抽出には不要・高速化）。
+
+```jsonc
+{
+  "provider": "ollama",
+  "providers": {
+    "ollama": { "endpoint": "http://127.0.0.1:11434", "model": "gemma4:12b", "think": false }
+  },
+  "scan_base": "/mnt/c/Users/<user>/.claude/projects",
+  "roots": { "PROJECTS": "/mnt/d/path/to/projects" },
+  "archive_root": "/mnt/d/path/to/projects/_conversation-archive",
+  "aliases": [ ["D:\\path\\to\\projects", "/mnt/d/path/to/projects"] ]
+}
+```
+
+前提: WSL 側に `python3`（3.9+ で可。`from __future__ import annotations` 済み）と ollama・対象モデルがあること。`data_dir` は未指定ならリポジトリ直下 `data/` に解決され、Windows 実行（`tstat`/`tsdel`）と台帳を共有します。
 
 ### インストール（PATH に追加）
 
@@ -127,7 +150,7 @@ if (($cur -split ';') -notcontains $bin) {
 }
 ```
 
-設定後、新しいシェルを開くと有効になります。各 `.cmd` はリポジトリ位置を `%~dp0` で自動解決するため、リポジトリを移動しても PATH を貼り直すだけで動きます。日本語出力の文字化け/クラッシュ回避のため、ラッパー内で `PYTHONUTF8=1` と `chcp 65001`（終了時に元へ復元）を設定しています。
+設定後、新しいシェルを開くと有効になります。各 `.cmd` はリポジトリ位置を `%~dp0` で自動解決するため、リポジトリを移動しても PATH を貼り直すだけで動きます。日本語出力の文字化け回避のため `chcp 65001`（終了時に元へ復元）を、Windows 実行時は併せて `PYTHONUTF8=1` を設定しています。
 
 ---
 
