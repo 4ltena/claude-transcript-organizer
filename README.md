@@ -37,6 +37,22 @@ python cli.py organize
 python cli.py organize --dry-run
 ```
 
+処理の内訳（読込中のトランスクリプト・凝縮結果・分類/ルート判定・抽出した findings）を逐次見たい場合は `--verbose`（`-v`）。トレースは **stderr**、最終サマリは **stdout** に出力されます:
+
+```bash
+python cli.py organize --verbose
+```
+
+出力例（stderr）:
+
+```
+[読込] 04520aae-….jsonl (sid=04520aae…)
+  凝縮: title='Review feature design' cwd=… msgs=23 chars=7119
+  ルート: label=my-project root=<PROJECTS>/my-project
+  抽出: 提案=7件 {'decision': 3, 'next_step': 2, 'gotcha': 2} 新規=4件
+[HANDOFF更新] <PROJECTS>/my-project/docs/HANDOFF.md
+```
+
 特定プロジェクトだけ対象にする場合:
 
 ```bash
@@ -69,6 +85,49 @@ python cli.py delete --yes
 # 特定プロジェクトだけ対象にする場合
 python cli.py delete --project my-project --yes
 ```
+
+---
+
+## 短縮コマンド (tsorg / tstat / tsdel)
+
+任意のディレクトリから手軽に呼べるよう、`bin/` に Windows 用のラッパー(`.cmd`)を同梱しています。
+
+| コマンド | 等価 |
+|---------|------|
+| `tsorg` | `python cli.py organize --config <repo>\config.local.json --verbose` |
+| `tstat` | `python cli.py status` |
+| `tsdel` | `python cli.py delete` |
+
+`tsorg` は `--config config.local.json` と `--verbose` を既定で付与します。
+
+- **`config.local.json`**（`.gitignore` 済み・任意）に環境固有の設定を書けます。存在すればそれが使われ、無ければ既定値にフォールバックします。ローカル LLM をデフォルトにしたい場合は、このファイルに `"provider": "ollama"` と `providers.ollama.model` を設定してください（例: WSL/ローカルの ollama を `http://localhost:11434` で利用）。
+- **`--verbose`** で会話ごとの処理トレース（読込・凝縮・分類/ルート・抽出）を **stderr** に、最終サマリを **stdout** に出力します。
+
+引数はそのまま転送され、末尾が後勝ちのため、その回だけ別プロバイダへ上書きもできます。
+
+```bat
+tsorg                              ← config.local.json の provider で実行
+tsorg --dry-run
+tsorg --provider anthropic         ← その回だけ上書き
+tsorg --project my-project
+tstat
+tsdel
+tsdel --yes
+```
+
+### インストール（PATH に追加）
+
+`bin/` をユーザー PATH に一度追加すれば、以降どこからでも使えます（PowerShell）。
+
+```powershell
+$bin = "<このリポジトリ>\bin"
+$cur = [Environment]::GetEnvironmentVariable("Path", "User")
+if (($cur -split ';') -notcontains $bin) {
+  [Environment]::SetEnvironmentVariable("Path", $cur.TrimEnd(';') + ';' + $bin, "User")
+}
+```
+
+設定後、新しいシェルを開くと有効になります。各 `.cmd` はリポジトリ位置を `%~dp0` で自動解決するため、リポジトリを移動しても PATH を貼り直すだけで動きます。日本語出力の文字化け/クラッシュ回避のため、ラッパー内で `PYTHONUTF8=1` と `chcp 65001`（終了時に元へ復元）を設定しています。
 
 ---
 
