@@ -68,6 +68,47 @@ def test_sidechain_in_ledger_is_protected(tmp_path, write_jsonl):
     assert plan["protect"].get("sidechain", 0) >= 1
 
 
+def test_plan_only_label_filters(tmp_path, write_jsonl):
+    """only_label はラベルが一致する処理済みトランスクリプトのみを削除対象にする。"""
+    import json as _json
+    proj = tmp_path / "projects"
+    label_a_dir = proj / "labelA"
+    label_a_dir.mkdir(parents=True)
+
+    scan = tmp_path / "scan"; (scan / "enc").mkdir(parents=True)
+    cfg_path = tmp_path / "c.json"
+    cfg_path.write_text(_json.dumps({
+        "scan_base": str(scan),
+        "data_dir": str(tmp_path / "data"),
+        "protect_recent_minutes": 0,
+        "roots": {"PROJECTS": str(proj)},
+        "archive_root": str(proj / "_arch"),
+    }))
+    from transcript_organizer.config import load_config
+    cfg = load_config(str(cfg_path))
+
+    # File A: cwd under PROJECTS/labelA → routes to label "labelA"
+    rows_a = [{"type": "user", "cwd": str(label_a_dir),
+               "timestamp": "2026-06-25T00:00:00Z",
+               "message": {"role": "user", "content": "x" * 500}}]
+    # File B: cwd not under PROJECTS → routes to "_archive"
+    rows_b = [{"type": "user", "cwd": "/unrelated",
+               "timestamp": "2026-06-25T00:00:00Z",
+               "message": {"role": "user", "content": "x" * 500}}]
+
+    fa = write_jsonl("aaa.jsonl", rows_a); os.replace(fa, scan / "enc" / "aaa.jsonl")
+    fb = write_jsonl("bbb.jsonl", rows_b); os.replace(fb, scan / "enc" / "bbb.jsonl")
+
+    ledger = Ledger(os.path.join(cfg.data_dir, "ledger.json"))
+    ledger.mark("aaa", {"label": "labelA"})
+    ledger.mark("bbb", {"label": "_archive"})
+
+    plan = plan_deletion(cfg, now_epoch=time.time() + 10**9, only_label="labelA")
+    names = [os.path.basename(p) for p in plan["delete"]]
+    assert names == ["aaa.jsonl"]
+    assert plan["protect"].get("other_label", 0) >= 1
+
+
 def test_execute_skips_path_outside_scan_base(tmp_path, write_jsonl):
     """execute は scan_base 外のパスをスキップする（パス封じ込めガード）。"""
     cfg, scan = _setup(tmp_path, write_jsonl)

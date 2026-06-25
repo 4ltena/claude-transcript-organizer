@@ -3,9 +3,10 @@ from .discover import iter_conversations, classify
 from .condense import condense
 from .ledger import Ledger
 from .pipeline import current_protect
+from .route import route
 
 
-def plan_deletion(config, now_epoch=None) -> dict:
+def plan_deletion(config, now_epoch=None, only_label=None) -> dict:
     """Determine which conversations are safe to delete.
 
     A path is deletable only if:
@@ -13,12 +14,16 @@ def plan_deletion(config, now_epoch=None) -> dict:
     - not in current_protect (session-id / env guard)
     - not classified as 'active' (recently modified)
     - not classified as 'sidechain'
+    - (when only_label is set) routed label matches only_label
 
     exclude_globs are already applied by iter_conversations.
 
     Args:
         config: Config object.
         now_epoch: Override for current time (float seconds since epoch).
+        only_label: When set, only conversations routed to this label are
+            eligible for deletion; others are counted as "other_label" in
+            protect.  Safety guards always take precedence.
 
     Returns:
         dict with keys:
@@ -46,6 +51,10 @@ def plan_deletion(config, now_epoch=None) -> dict:
             bump("active"); continue
         if "sidechain" in flags:          # defense-in-depth
             bump("sidechain"); continue
+        if only_label is not None:
+            target = route(cd.cwd, config)
+            if target.label != only_label:
+                bump("other_label"); continue
         delete.append(meta.path)
     return {"delete": delete, "protect": protect}
 

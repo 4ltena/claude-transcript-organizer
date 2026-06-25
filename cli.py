@@ -37,7 +37,7 @@ def main(argv=None) -> int:
               f"findings: {r['labels']}")
         return 0
     if args.cmd == "delete":
-        plan = deleter.plan_deletion(cfg)
+        plan = deleter.plan_deletion(cfg, only_label=args.project)
         if not args.yes:
             print(f"[dry-run] 削除候補: {len(plan['delete'])}件 / "
                   f"保護: {plan['protect']} （実行は --yes）")

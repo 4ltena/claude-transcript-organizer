@@ -1,4 +1,4 @@
-import json, os, time
+import json
 import cli
 
 def _cfg(tmp_path):
