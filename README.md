@@ -43,6 +43,12 @@ python cli.py organize --dry-run
 python cli.py organize --project my-project
 ```
 
+台帳登録済みの会話も再処理する場合（HANDOFF再構築用）:
+
+```bash
+python cli.py organize --rebuild
+```
+
 ### 2. 状態確認 (status)
 
 ```bash
@@ -59,6 +65,9 @@ python cli.py delete
 
 # 実際にtrashへ退避する
 python cli.py delete --yes
+
+# 特定プロジェクトだけ対象にする場合
+python cli.py delete --project my-project --yes
 ```
 
 ---

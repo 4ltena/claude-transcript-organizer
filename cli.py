@@ -10,7 +10,7 @@ def build_parser():
     o = sub.add_parser("organize", help="抽出してHANDOFFを更新（削除しない）")
     o.add_argument("--config"); o.add_argument("--provider")
     o.add_argument("--project"); o.add_argument("--rebuild", action="store_true")
-    o.add_argument("--dry-run", action="store_true"); o.add_argument("-v", action="store_true")
+    o.add_argument("--dry-run", action="store_true")
     s = sub.add_parser("status", help="未処理件数・findings件数を表示")
     s.add_argument("--config")
     d = sub.add_parser("delete", help="処理済み会話をtrashへ退避（既定dry-run）")
