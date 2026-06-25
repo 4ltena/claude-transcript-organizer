@@ -1,5 +1,5 @@
-import json, os
-from dataclasses import dataclass, field, fields
+import copy, json, os
+from dataclasses import dataclass, fields
 
 _DEFAULTS = {
     "provider": "gemini",
@@ -52,7 +52,7 @@ class Config:
     data_dir: str
 
 def load_config(path: str | None = None) -> Config:
-    data = dict(_DEFAULTS)
+    data = copy.deepcopy(_DEFAULTS)
     if path and os.path.isfile(path):
         with open(path, encoding="utf-8") as f:
             user = json.load(f)

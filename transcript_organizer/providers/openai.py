@@ -9,6 +9,8 @@ class OpenAIProvider(Provider):
 
     def propose_findings(self, text: str, schema: dict) -> dict:
         key = os.environ.get(self.key_env)
+        if not key:
+            raise RuntimeError(f"{self.key_env} is not set")
         url = "https://api.openai.com/v1/chat/completions"
         payload = {"model": self.model,
                    "messages": [{"role": "user", "content": text}],

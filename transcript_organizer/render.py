@@ -13,10 +13,14 @@ _SECTIONS = [
     ("open_question", "### 未決事項"),
 ]
 
+def _sanitize(s: str) -> str:
+    """Strip managed-block markers so LLM-generated text cannot inject them."""
+    return s.replace(BEGIN, "").replace(END, "")
+
 def _line(r):
-    src = "、".join(r.get("src_titles", [])[:2])
+    src = "、".join(_sanitize(t) for t in r.get("src_titles", [])[:2])
     suffix = f"（出典: {src}）" if src else ""
-    return f"- {r['text']}{suffix}"
+    return f"- {_sanitize(r['text'])}{suffix}"
 
 def render_markdown(records, label: str, date: str) -> str:
     by_kind = {}

@@ -20,3 +20,16 @@ def test_merge_dedup_and_source_accumulation(tmp_path):
     dec = [r for r in recs if r["kind"] == "decision"][0]
     assert set(dec["src_titles"]) == {"conv-A", "conv-B"}
     assert dec["last_seen"] == "2026-06-25T00:00:00Z"
+
+
+def test_merge_src_ts_list_no_duplicates(tmp_path):
+    store = FindingStore(str(tmp_path))
+    ts = "2026-06-20T00:00:00Z"
+    f = Finding("decision", "Xを採用", 0.9, "conv-A", ts, "P")
+    # Merge the same finding (same src_ts) twice — src_ts_list must stay length 1
+    store.merge("P", [f])
+    store.merge("P", [f])
+    recs = store.load("P")
+    dec = [r for r in recs if r["kind"] == "decision"][0]
+    assert dec["src_ts_list"].count(ts) == 1
+    assert len(dec["src_ts_list"]) == 1

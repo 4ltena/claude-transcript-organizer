@@ -81,7 +81,7 @@ class FindingStore:
                 r = by_id[fid]
                 if f.source and f.source not in r["src_titles"]:
                     r["src_titles"].append(f.source)
-                if f.src_ts:
+                if f.src_ts and f.src_ts not in r["src_ts_list"]:
                     r["src_ts_list"].append(f.src_ts)
                     r["last_seen"] = max(r["last_seen"] or "", f.src_ts)
                 r["confidence"] = max(r.get("confidence", 0), f.confidence)
