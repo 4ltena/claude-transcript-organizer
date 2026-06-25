@@ -38,11 +38,13 @@ def plan_deletion(config, now_epoch=None) -> dict:
             bump("session_id"); continue
         if not ledger.is_processed(meta.sid):
             bump("unprocessed"); continue
+        if meta.is_sidechain:
+            bump("sidechain"); continue
         cd = condense(meta.path, config.condense_cap)
         flags = classify(meta, cd.body, config, now_epoch)
         if "active" in flags:
             bump("active"); continue
-        if "sidechain" in flags:
+        if "sidechain" in flags:          # defense-in-depth
             bump("sidechain"); continue
         delete.append(meta.path)
     return {"delete": delete, "protect": protect}
@@ -70,8 +72,11 @@ def execute(plan, config, yes: bool = False) -> dict:
     date = time.strftime("%Y-%m-%d")
     trash_root = os.path.join(config.data_dir, "trash", date)
     base = config.scan_base
+    real_base = os.path.realpath(base)
     moved = 0
     for path in plan["delete"]:
+        if not os.path.realpath(path).startswith(real_base + os.sep):
+            continue  # パスが scan_base の外にある（通常は発生しない）
         rel = os.path.relpath(path, base)
         dst = os.path.join(trash_root, rel)
         os.makedirs(os.path.dirname(dst), exist_ok=True)
