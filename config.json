@@ -1,0 +1,25 @@
+{
+    "provider": "gemini",
+    "providers": {
+        "gemini":    {"api_key_env": "GEMINI_API_KEY", "model": "gemini-2.5-flash"},
+        "anthropic": {"api_key_env": "ANTHROPIC_API_KEY", "model": "claude-haiku-4-5-20251001"},
+        "openai":    {"api_key_env": "OPENAI_API_KEY", "model": "gpt-4.1-mini"},
+        "ollama":    {"endpoint": "http://localhost:11434", "model": "qwen3.5:4b"}
+    },
+    "scan_base": "~/.claude/projects",
+    "roots": {"PROJECTS": "~/File/projects"},
+    "archive_root": "~/File/projects/_conversation-archive",
+    "containers": ["Other", "School", "Webs", "claude", "discord-bots", "mcp", "Exam"],
+    "aliases": [],
+    "exclude_globs": ["*autonomous*"],
+    "include_sidechain": false,
+    "meta_signatures": ["引き継ぎ", "transcript-organizer"],
+    "protect_recent_minutes": 30,
+    "condense_cap": 22000,
+    "min_msgs": 2,
+    "min_chars": 400,
+    "retries": 2,
+    "delete": {"trash_retention_days": 14},
+    "protect_session_ids": [],
+    "data_dir": null
+}
