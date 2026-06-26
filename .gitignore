@@ -5,3 +5,4 @@ __pycache__/
 config.local.json
 config.wsl.json
 docs/HANDOFF.md
+docs/superpowers/

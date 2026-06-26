@@ -1,24 +1,31 @@
+**日本語** | [English](README.en.md)
+
+![Version](https://img.shields.io/badge/version-1.0.0-blue)
+![License](https://img.shields.io/badge/license-MIT-green)
+![Platform](https://img.shields.io/badge/platform-Windows%20%7C%20macOS%20%7C%20Linux-lightgrey)
+![Python](https://img.shields.io/badge/Python%203.9+-3776AB?logo=python&logoColor=white)
+
 # claude-transcript-organizer
 
-> Claude Code の会話 transcript を解析し、プロジェクトごとの HANDOFF ファイルへ知見を蓄積するツール。LLM は提案するだけ、書き込みは決定論的 Python が担うため、API 障害でも HANDOFF は壊れない。
+> Claude Code の会話 transcript を解析し、プロジェクトごとの `HANDOFF.md` に知見を蓄積する CLI ツール。LLM は提案するだけで、書き込みは決定論的コードが担うため、API 障害でも HANDOFF は壊れない。
+> A CLI that distils Claude Code transcripts into per-project `HANDOFF.md` — the LLM only proposes, deterministic code does every write, so a flaky LLM never corrupts your HANDOFF.
+>
+> **Version 1.0.0**
 
-![python](https://img.shields.io/badge/python-3.10%2B-blue) ![license](https://img.shields.io/badge/license-MIT-green)
+`~/.claude/projects` 以下に蓄積された会話ファイル(`.jsonl`)を走査し、**LLM** に投げて技術的知見・決定事項・TODO を抽出。プロジェクトルートの `HANDOFF.md` にある専用マーカー領域へ自動で書き込み、人間が書いたそれ以外の文章はそのまま保持します。
 
-`~/.claude/projects` 以下に蓄積された会話ファイル(`.jsonl`)を走査し、**LLM API** に投げて技術的知見・決定事項・TODO を抽出。プロジェクトルートの `HANDOFF.md` にある専用マーカー領域へ自動で書き込み、人間が書いたそれ以外の文章はそのまま保持します。
-
-```
-~/.claude/projects/**/*.jsonl
-        │
-        ▼ discover / classify
-    未処理の会話を台帳と照合
-        │
-        ▼ condense → LLM extract
-    findings (知見・決定・TODO) を生成
-        │
-        ▼ FindingStore に蓄積・重複排除
-        │
-        ▼ render + update HANDOFF marker region
-    HANDOFF.md の <!-- BEGIN/END transcript-organizer --> 領域を更新
+```mermaid
+flowchart TD
+    A[".jsonl transcripts under scan_base"] --> B{"already in ledger?"}
+    B -- yes --> S[skip]
+    B -- no --> C[condense]
+    C --> D{classify}
+    D -- "protected / excluded" --> S
+    D -- pass --> E["route: cwd → label & root"]
+    E --> F["LLM extract<br/>(1 call per conversation)"]
+    F --> G["FindingStore.merge<br/>(dedup by id)"]
+    G --> H["ledger.mark"]
+    H --> I["render → HANDOFF.md marker region"]
 ```
 
 > ドキュメント: 操作手順は [docs/USAGE.md](docs/USAGE.md)、設計・アーキテクチャは [docs/DESIGN.md](docs/DESIGN.md)。
@@ -97,7 +104,7 @@ python cli.py delete --project my-project --yes
 
 | コマンド | 等価 |
 |---------|------|
-| `tsorg` | `python cli.py organize --config <repo>\config.local.json --verbose` |
+| `tsorg` | `python cli.py organize …` |
 | `tstat` | `python cli.py status` |
 | `tsdel` | `python cli.py delete` |
 

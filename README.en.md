@@ -1,0 +1,243 @@
+[日本語](README.md) | **English**
+
+![Version](https://img.shields.io/badge/version-1.0.0-blue)
+![License](https://img.shields.io/badge/license-MIT-green)
+![Platform](https://img.shields.io/badge/platform-Windows%20%7C%20macOS%20%7C%20Linux-lightgrey)
+![Python](https://img.shields.io/badge/Python%203.9+-3776AB?logo=python&logoColor=white)
+
+# claude-transcript-organizer
+
+> A CLI that distils Claude Code transcripts into per-project `HANDOFF.md` — the LLM only proposes, deterministic code does every write, so a flaky LLM never corrupts your HANDOFF.
+> Claude Code の会話 transcript を解析し、プロジェクトごとの `HANDOFF.md` に知見を蓄積する CLI ツール。LLM は提案するだけで、書き込みは決定論的コードが担う。
+>
+> **Version 1.0.0**
+
+It scans the conversation files (`.jsonl`) accumulated under `~/.claude/projects`, sends them to an **LLM** to extract technical findings, decisions and TODOs, and writes them into a dedicated marker region of each project's `HANDOFF.md`. Everything a human wrote outside that region is left untouched.
+
+```mermaid
+flowchart TD
+    A[".jsonl transcripts under scan_base"] --> B{"already in ledger?"}
+    B -- yes --> S[skip]
+    B -- no --> C[condense]
+    C --> D{classify}
+    D -- "protected / excluded" --> S
+    D -- pass --> E["route: cwd → label & root"]
+    E --> F["LLM extract<br/>(1 call per conversation)"]
+    F --> G["FindingStore.merge<br/>(dedup by id)"]
+    G --> H["ledger.mark"]
+    H --> I["render → HANDOFF.md marker region"]
+```
+
+> Docs: operations manual in [docs/USAGE.md](docs/USAGE.md), design & architecture in [docs/DESIGN.md](docs/DESIGN.md).
+
+---
+
+## Core flow: organize → status → delete
+
+### 1. organize
+
+```bash
+python cli.py organize
+```
+
+Scans conversations, extracts findings with the LLM, and updates `HANDOFF.md`. To preview without writing anything:
+
+```bash
+python cli.py organize --dry-run
+```
+
+To watch the per-conversation trace (which transcript is read, how it is classified/routed, what findings are extracted), use `--verbose` (`-v`). The trace goes to **stderr**, the final summary to **stdout**. Each line is English in the form `HH:MM:SS · event · id · detail` (event = `read` / `route` / `extract` / `skip` / `dry-run` / `handoff`). On a TTY a progress bar with a remaining count is pinned to the bottom line (`#` hashes).
+
+```bash
+python cli.py organize --verbose
+```
+
+Example output (stderr):
+
+```
+02:29:47 · read    · 04520aae-5f96-48f5-99a8-a112de5b2042 · title='Review feature design' cwd=… msgs=23 chars=7119
+02:29:47 · route   · 04520aae-5f96-48f5-99a8-a112de5b2042 · label=my-project root=<PROJECTS>/my-project
+02:29:52 · extract · 04520aae-5f96-48f5-99a8-a112de5b2042 · proposed=7 {'decision': 3, 'next_step': 2, 'gotcha': 2} new=4
+02:30:01 · skip    · 0c059f90-dc2f-4ab3-84d3-5b5f24a059ce · trivial (too little content)
+02:35:10 · handoff · my-project · <PROJECTS>/my-project/docs/HANDOFF.md
+[##############----------]  58.3%  712/1220  remaining 508
+```
+
+Restrict to a single project:
+
+```bash
+python cli.py organize --project my-project
+```
+
+Reprocess conversations already in the ledger (to rebuild a lost HANDOFF):
+
+```bash
+python cli.py organize --rebuild
+```
+
+### 2. status
+
+```bash
+python cli.py status
+```
+
+Shows the unprocessed count, ledger size, and per-project findings counts.
+
+### 3. delete
+
+```bash
+# dry-run: just lists deletion candidates (default)
+python cli.py delete
+
+# actually move them to trash
+python cli.py delete --yes
+
+# restrict to a single project
+python cli.py delete --project my-project --yes
+```
+
+---
+
+## Shortcut commands (tsorg / tstat / tsdel)
+
+`bin/` ships Windows wrappers (`.cmd`) so the commands are callable from any directory.
+
+| command | equivalent |
+|---------|------------|
+| `tsorg` | `python cli.py organize …` |
+| `tstat` | `python cli.py status` |
+| `tsdel` | `python cli.py delete` |
+
+`tsorg` adds `--verbose` by default and switches execution target based on which config file exists next to the repo (adaptive):
+
+- **If `config.wsl.json` exists → run inside WSL** (`wsl python3 cli.py …`). For driving a local LLM via ollama in WSL. Windows⇄WSL HTTP POST is unreliable for sustained calls, so the tool itself runs inside WSL and reaches ollama over **native localhost**.
+- **Otherwise → run with Windows python**, reading `config.local.json` (if present).
+
+Both config files are gitignored and optional. `tstat`/`tsdel` use no LLM, so they always run on the Windows side. Arguments are forwarded as-is, and since the last one wins you can override the provider for a single run.
+
+```bat
+tsorg                              :: runs with the provider from config.(wsl|local).json
+tsorg --dry-run
+tsorg --provider anthropic         :: override for this run only
+tsorg --project my-project
+tstat
+tsdel
+tsdel --yes
+```
+
+### Using ollama in WSL (`config.wsl.json`)
+
+Example for driving WSL (e.g. AlmaLinux) ollama as the local LLM. Write paths from the **WSL (posix) point of view**, and remap the Windows-style `cwd` recorded in conversations to `/mnt/...` via `aliases`. `think:false` suppresses the verbose thinking output of reasoning models (gemma/qwen3 etc.) — unnecessary for extraction and faster.
+
+```jsonc
+{
+  "provider": "ollama",
+  "providers": {
+    "ollama": { "endpoint": "http://127.0.0.1:11434", "model": "gemma4:12b", "think": false }
+  },
+  "scan_base": "/mnt/c/Users/<user>/.claude/projects",
+  "roots": { "PROJECTS": "/mnt/d/path/to/projects" },
+  "archive_root": "/mnt/d/path/to/projects/_conversation-archive",
+  "aliases": [ ["D:\\path\\to\\projects", "/mnt/d/path/to/projects"] ]
+}
+```
+
+Prerequisites: `python3` in WSL (3.9+ works thanks to `from __future__ import annotations`), plus ollama and the target model. When `data_dir` is unset it resolves to `data/` next to the repo, sharing the ledger with the Windows-side runs (`tstat`/`tsdel`).
+
+### Install (add to PATH)
+
+Add `bin/` to your user PATH once, then the commands work from anywhere (PowerShell):
+
+```powershell
+$bin = "<this-repo>\bin"
+$cur = [Environment]::GetEnvironmentVariable("Path", "User")
+if (($cur -split ';') -notcontains $bin) {
+  [Environment]::SetEnvironmentVariable("Path", $cur.TrimEnd(';') + ';' + $bin, "User")
+}
+```
+
+It takes effect in newly opened shells. Each `.cmd` resolves the repo location via `%~dp0`, so moving the repo only requires re-adding `bin` to PATH. To avoid mojibake on Japanese output the wrappers set `chcp 65001` (restored on exit), plus `PYTHONUTF8=1` for the Windows-side run.
+
+---
+
+## Provider selection
+
+Switch backend with the `--provider` flag or the `provider` key in `config.json`.
+
+```bash
+python cli.py organize --provider gemini      # default
+python cli.py organize --provider anthropic
+python cli.py organize --provider openai
+python cli.py organize --provider ollama      # local; no API key
+```
+
+Environment variables each provider needs:
+
+| provider | env var |
+|----------|---------|
+| `gemini` | `GEMINI_API_KEY` |
+| `anthropic` | `ANTHROPIC_API_KEY` |
+| `openai` | `OPENAI_API_KEY` |
+| `ollama` | none (set the endpoint via `endpoint` in `config.json`) |
+
+---
+
+## HANDOFF marker region
+
+If `HANDOFF.md` contains the marker block below, only the content inside it is replaced with auto-generated content on `organize`.
+
+```markdown
+<!-- BEGIN transcript-organizer -->
+(auto-generated region)
+<!-- END transcript-organizer -->
+```
+
+**Nothing outside the markers is ever rewritten.** Keep your project notes and instructions outside the markers and they persist. If the markers are absent, the block is appended to the end of the file.
+
+---
+
+## delete safety model
+
+| property | description |
+|----------|-------------|
+| **dry-run default** | Without `--yes` nothing is deleted; only the candidate count is shown. |
+| **ledger gate** | Only conversations recorded in the ledger (i.e. already `organize`d) become deletion candidates. |
+| **recent-session protection** | Files modified within `protect_recent_minutes` (default 30 min) are excluded. |
+| **protect_session_ids** | Session IDs listed in config are always protected. |
+| **trash retention** | Not deleted immediately but moved to `data/trash/`; GC'd after `delete.trash_retention_days` (default 14 days). |
+
+---
+
+## On `cas push` / sync
+
+This tool **does not run `cas push` or any external sync**. Run `cas push` manually after `HANDOFF.md` is updated, or wrap it in your own shell script / scheduler.
+
+---
+
+## Configuration (config.json)
+
+`config.json` holds the defaults. Main keys:
+
+| key | default | meaning |
+|-----|---------|---------|
+| `provider` | `gemini` | LLM provider to use |
+| `scan_base` | `~/.claude/projects` | scan root for conversation files |
+| `archive_root` | `~/File/projects/_conversation-archive` | location for archived conversations |
+| `include_sidechain` | `false` | whether to include sidechain conversations |
+| `condense_cap` | `22000` | max characters passed to the LLM |
+| `protect_recent_minutes` | `30` | conversations newer than this are delete-protected |
+| `delete.trash_retention_days` | `14` | trash retention in days |
+
+---
+
+## Tests
+
+```bash
+python -m pytest -q
+```
+
+---
+
+## License
+
+MIT
