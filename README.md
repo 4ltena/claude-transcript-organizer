@@ -21,6 +21,8 @@
     HANDOFF.md の <!-- BEGIN/END transcript-organizer --> 領域を更新
 ```
 
+> ドキュメント: 操作手順は [docs/USAGE.md](docs/USAGE.md)、設計・アーキテクチャは [docs/DESIGN.md](docs/DESIGN.md)。
+
 ---
 
 ## 基本フロー: organize → status → delete

@@ -4,3 +4,4 @@ __pycache__/
 .venv/
 config.local.json
 config.wsl.json
+docs/HANDOFF.md
