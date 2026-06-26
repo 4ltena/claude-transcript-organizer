@@ -314,12 +314,6 @@ If `HANDOFF.md` contains the marker block below, only the content inside it is r
 
 ---
 
-## On `cas push` / sync
-
-This tool **does not run `cas push` or any external sync**. Run `cas push` manually after `HANDOFF.md` is updated, or wrap it in your own shell script / scheduler.
-
----
-
 ## Configuration (config.json)
 
 `config.json` holds the defaults. Main keys:
