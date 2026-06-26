@@ -1,8 +1,15 @@
 #!/usr/bin/env bash
-# tsorg — organize wrapper for macOS / Linux (and WSL).
+# tsorg - organize wrapper for macOS / Linux (and WSL).
 # Runs native python3 with config.local.json when present, else config.json.
 set -euo pipefail
-here="$(cd "$(dirname "${BASH_SOURCE[0]:-$0}")" && pwd)"
+src="${BASH_SOURCE[0]:-$0}"
+# Resolve through symlinks (install.sh links this onto PATH).
+while [ -h "$src" ]; do
+    dir="$(cd -P "$(dirname "$src")" && pwd)"
+    src="$(readlink "$src")"
+    case "$src" in /*) ;; *) src="$dir/$src" ;; esac
+done
+here="$(cd -P "$(dirname "$src")" && pwd)"
 repo="$(dirname "$here")"
 config="$repo/config.json"
 [ -f "$repo/config.local.json" ] && config="$repo/config.local.json"
