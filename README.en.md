@@ -1,6 +1,6 @@
 [日本語](README.md) | **English**
 
-![Version](https://img.shields.io/badge/version-1.0.0-blue)
+![Version](https://img.shields.io/badge/version-1.1.0-blue)
 ![License](https://img.shields.io/badge/license-MIT-green)
 ![Platform](https://img.shields.io/badge/platform-Windows%20%7C%20macOS%20%7C%20Linux-lightgrey)
 ![Python](https://img.shields.io/badge/Python%203.9+-3776AB?logo=python&logoColor=white)
@@ -10,7 +10,7 @@
 > A CLI that distils Claude Code transcripts into per-project `HANDOFF.md` — the LLM only proposes, deterministic code does every write, so a flaky LLM never corrupts your HANDOFF.
 > Claude Code の会話 transcript を解析し、プロジェクトごとの `HANDOFF.md` に知見を蓄積する CLI ツール。LLM は提案するだけで、書き込みは決定論的コードが担う。
 >
-> **Version 1.0.0**
+> **Version 1.1.0**
 
 It scans the conversation files (`.jsonl`) accumulated under `~/.claude/projects`, sends them to an **LLM** to extract technical findings, decisions and TODOs, and writes them into a dedicated marker region of each project's `HANDOFF.md`. Everything a human wrote outside that region is left untouched.
 
@@ -98,55 +98,33 @@ python cli.py delete --project my-project --yes
 
 ---
 
-## Shortcut commands (tsorg / tstat / tsdel)
+## Installation
 
-`bin/` ships Windows wrappers (`.cmd`) so the commands are callable from any directory.
+If you have Python 3.9+, it runs. Standard library only — no extra packages. Clone the repo anywhere and run the commands from the directory that holds `cli.py`.
 
-| command | equivalent |
-|---------|------------|
-| `tsorg` | `python cli.py organize …` |
-| `tstat` | `python cli.py status` |
-| `tsdel` | `python cli.py delete` |
-
-`tsorg` adds `--verbose` by default and switches execution target based on which config file exists next to the repo (adaptive):
-
-- **If `config.wsl.json` exists → run inside WSL** (`wsl python3 cli.py …`). For driving a local LLM via ollama in WSL. Windows⇄WSL HTTP POST is unreliable for sustained calls, so the tool itself runs inside WSL and reaches ollama over **native localhost**.
-- **Otherwise → run with Windows python**, reading `config.local.json` (if present).
-
-Both config files are gitignored and optional. `tstat`/`tsdel` use no LLM, so they always run on the Windows side. Arguments are forwarded as-is, and since the last one wins you can override the provider for a single run.
-
-```bat
-tsorg                              :: runs with the provider from config.(wsl|local).json
-tsorg --dry-run
-tsorg --provider anthropic         :: override for this run only
-tsorg --project my-project
-tstat
-tsdel
-tsdel --yes
+```bash
+git clone <repo> claude-transcript-organizer
+cd claude-transcript-organizer
+python cli.py status        # smoke test (read-only)
 ```
 
-### Using ollama in WSL (`config.wsl.json`)
+To call `tsorg`/`tstat`/`tsdel` from any directory, put `bin/` on PATH. For the per-OS execution model and local-LLM setups, see [Shortcut commands](#shortcut-commands-tsorg--tstat--tsdel).
 
-Example for driving WSL (e.g. AlmaLinux) ollama as the local LLM. Write paths from the **WSL (posix) point of view**, and remap the Windows-style `cwd` recorded in conversations to `/mnt/...` via `aliases`. `think:false` suppresses the verbose thinking output of reasoning models (gemma/qwen3 etc.) — unnecessary for extraction and faster.
+### Windows
 
-```jsonc
-{
-  "provider": "ollama",
-  "providers": {
-    "ollama": { "endpoint": "http://127.0.0.1:11434", "model": "gemma4:12b", "think": false }
-  },
-  "scan_base": "/mnt/c/Users/<user>/.claude/projects",
-  "roots": { "PROJECTS": "/mnt/d/path/to/projects" },
-  "archive_root": "/mnt/d/path/to/projects/_conversation-archive",
-  "aliases": [ ["D:\\path\\to\\projects", "/mnt/d/path/to/projects"] ]
-}
+Running the bundled `install.ps1` once adds `bin/` to your user PATH. It is idempotent, so re-running never duplicates the entry.
+
+```powershell
+.\install.ps1
 ```
 
-Prerequisites: `python3` in WSL (3.9+ works thanks to `from __future__ import annotations`), plus ollama and the target model. When `data_dir` is unset it resolves to `data/` next to the repo, sharing the ledger with the Windows-side runs (`tstat`/`tsdel`).
+It also updates the running session's PATH, so `tsorg` works right away, and stays available in new shells. If script execution is blocked by policy, start it as `powershell -ExecutionPolicy Bypass -File install.ps1`. Remove the entry with `-Uninstall`:
 
-### Install (add to PATH)
+```powershell
+.\install.ps1 -Uninstall
+```
 
-Add `bin/` to your user PATH once, then the commands work from anywhere (PowerShell):
+To add it manually instead (PowerShell):
 
 ```powershell
 $bin = "<this-repo>\bin"
@@ -156,7 +134,23 @@ if (($cur -split ';') -notcontains $bin) {
 }
 ```
 
-It takes effect in newly opened shells. Each `.cmd` resolves the repo location via `%~dp0`, so moving the repo only requires re-adding `bin` to PATH. To avoid mojibake on Japanese output the wrappers set `chcp 65001` (restored on exit), plus `PYTHONUTF8=1` for the Windows-side run.
+Each `.cmd` resolves the repo location via `%~dp0`, so moving the repo only requires re-adding `bin` to PATH. To avoid mojibake on Japanese output the wrappers set `chcp 65001` (restored on exit), plus `PYTHONUTF8=1` for the Windows-side run.
+
+### macOS / Linux
+
+`install.sh` makes the posix wrappers executable and symlinks them into `~/.local/bin`. It is idempotent.
+
+```bash
+sh install.sh
+```
+
+Change the destination with `TSORG_BIN_DIR=/usr/local/bin sh install.sh`. If the destination is not on PATH, the script says so. Remove the links with `sh install.sh --uninstall`. You can also put `bin/` on PATH directly:
+
+```bash
+export PATH="$PATH:/path/to/repo/bin"   # add to your shell rc
+```
+
+Each wrapper resolves the repo location on its own, so moving the repo only requires re-linking.
 
 ---
 
@@ -179,6 +173,118 @@ Environment variables each provider needs:
 | `anthropic` | `ANTHROPIC_API_KEY` |
 | `openai` | `OPENAI_API_KEY` |
 | `ollama` | none (set the endpoint via `endpoint` in `config.json`) |
+
+---
+
+## Shortcut commands (tsorg / tstat / tsdel)
+
+`bin/` ships wrappers so the commands are callable from any directory: `.cmd` for Windows and extensionless shell scripts (`tsorg`/`tstat`/`tsdel`) for macOS/Linux. They share names, so once `bin/` is on PATH the same command name works on every OS.
+
+| command | equivalent |
+|---------|------------|
+| `tsorg` | `python cli.py organize …` |
+| `tstat` | `python cli.py status` |
+| `tsdel` | `python cli.py delete` |
+
+`tsorg` adds `--verbose` by default. The Windows `.cmd` version switches execution target based on which config file exists next to the repo (adaptive):
+
+- **If `config.wsl.json` exists → run inside WSL** (`wsl python3 cli.py …`). For driving a local LLM via ollama in WSL. Windows⇄WSL HTTP POST is unreliable for sustained calls, so the tool itself runs inside WSL and reaches ollama over **native localhost**.
+- **Otherwise → run with Windows python**, reading `config.local.json` (if present).
+
+The posix version has no such branch: it always runs `python3`, reading `config.local.json` if present, otherwise `config.json`.
+
+Both config files are gitignored and optional. The Windows `tstat`/`tsdel` use no LLM, so they always run on the Windows side. Arguments are forwarded as-is, and since the last one wins you can override the provider for a single run.
+
+```bat
+tsorg                              :: runs with the provider from config.(wsl|local).json
+tsorg --dry-run
+tsorg --provider anthropic         :: override for this run only
+tsorg --project my-project
+tstat
+tsdel
+tsdel --yes
+```
+
+#### Windows-native (`config.local.json`)
+
+Run directly with Windows python, without WSL. As long as `config.wsl.json` is absent, `tsorg` takes this path. The conversation `cwd` is already recorded in Windows form, so no `aliases` are needed.
+
+For a cloud provider (the default Gemini, etc.) no config file is required — set the API key in the environment and run:
+
+```powershell
+$env:GEMINI_API_KEY = "..."   # persist with setx for everyday use
+tsorg --dry-run
+```
+
+To match the label-resolution root `roots.PROJECTS` and the storage locations to your machine, put overrides in `config.local.json`. The same file is where you point at a Windows-native ollama by setting its endpoint and model. Write paths in Windows form.
+
+```jsonc
+{
+  "provider": "ollama",
+  "providers": {
+    "ollama": { "endpoint": "http://localhost:11434", "model": "qwen3.5:4b", "think": false }
+  },
+  "scan_base": "~/.claude/projects",
+  "roots": { "PROJECTS": "D:\\path\\to\\projects" },
+  "archive_root": "D:\\path\\to\\projects\\_conversation-archive"
+}
+```
+
+Prerequisites: Python 3.9+ on Windows. For ollama, install the Windows build, start `ollama serve`, and `ollama pull` the target model. With a cloud provider, ollama is not needed.
+
+#### Using ollama in WSL (`config.wsl.json`)
+
+Example for driving WSL (e.g. AlmaLinux) ollama as the local LLM. Write paths from the **WSL (posix) point of view**, and remap the Windows-style `cwd` recorded in conversations to `/mnt/...` via `aliases`. `think:false` suppresses the verbose thinking output of reasoning models (gemma/qwen3 etc.) — unnecessary for extraction and faster.
+
+```jsonc
+{
+  "provider": "ollama",
+  "providers": {
+    "ollama": { "endpoint": "http://127.0.0.1:11434", "model": "gemma4:12b", "think": false }
+  },
+  "scan_base": "/mnt/c/Users/<user>/.claude/projects",
+  "roots": { "PROJECTS": "/mnt/d/path/to/projects" },
+  "archive_root": "/mnt/d/path/to/projects/_conversation-archive",
+  "aliases": [ ["D:\\path\\to\\projects", "/mnt/d/path/to/projects"] ]
+}
+```
+
+Prerequisites: `python3` in WSL (3.9+ works thanks to `from __future__ import annotations`), plus ollama and the target model. When `data_dir` is unset it resolves to `data/` next to the repo, sharing the ledger with the Windows-side runs (`tstat`/`tsdel`).
+
+#### macOS / Linux (`config.local.json`)
+
+The posix wrappers run `python3` directly. Write every path in posix form and set `scan_base` to your environment. The conversation `cwd` is recorded in posix form too, so no `aliases` are needed.
+
+For a cloud provider, just put the API key in the environment — no config file required:
+
+```bash
+export GEMINI_API_KEY="..."   # add to your shell rc for everyday use
+tsorg --dry-run
+```
+
+For a local LLM, install native ollama, start `ollama serve`, and `ollama pull` the target model. Point `endpoint` at `http://localhost:11434`:
+
+```jsonc
+{
+  "provider": "ollama",
+  "providers": {
+    "ollama": { "endpoint": "http://localhost:11434", "model": "qwen3.5:4b", "think": false }
+  },
+  "scan_base": "~/.claude/projects",
+  "roots": { "PROJECTS": "/Users/<user>/projects" },
+  "archive_root": "/Users/<user>/projects/_conversation-archive"
+}
+```
+
+`~` in `scan_base` is expanded to the home directory. On Linux, replace `roots`/`archive_root` with `/home/<user>/...`. The only prerequisites are `python3` 3.9+ and, for a local LLM, ollama with the target model.
+
+| OS | install ollama | endpoint |
+|----|----------------|----------|
+| macOS | official app, or `brew install ollama`, then `ollama serve` | `http://localhost:11434` |
+| Linux | `curl -fsSL https://ollama.com/install.sh \| sh`, then `ollama serve` | `http://localhost:11434` |
+| WSL | install ollama inside the distro and `ollama serve` (the tool runs in WSL too) | `http://127.0.0.1:11434` (WSL-local) |
+
+To reach ollama on another machine, change `endpoint` to that host's `http://<host>:11434`; the remote side must listen with `OLLAMA_HOST=0.0.0.0`.
 
 ---
 

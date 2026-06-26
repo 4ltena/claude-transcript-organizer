@@ -1,0 +1,9 @@
+#!/usr/bin/env bash
+# tstat — status wrapper for macOS / Linux (and WSL).
+set -euo pipefail
+here="$(cd "$(dirname "${BASH_SOURCE[0]:-$0}")" && pwd)"
+repo="$(dirname "$here")"
+config="$repo/config.json"
+[ -f "$repo/config.local.json" ] && config="$repo/config.local.json"
+export PYTHONUTF8=1
+exec python3 "$repo/cli.py" status --config "$config" "$@"
