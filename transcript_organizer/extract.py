@@ -26,11 +26,18 @@ class ExtractionError(Exception):
     pass
 
 def build_prompt(condensed) -> str:
+    # ローカルモデル(ollama 等)は出力の形をゆるく解釈しがちなため、エンベロープ
+    # (トップキー findings・各要素の kind/text/confidence・コードフェンス禁止)を
+    # 明示する。スキーマ拘束が効くクラウド系にも無害。
     return (
         "あなたは会話履歴から引き継ぎ用の事実を抽出する分析器です。"
-        "以下の凝縮済み会話を読み、既存の設計書に載りにくい会話固有の事実だけを抽出し、"
-        "JSON で返してください。kind は "
-        f"{sorted(VALID_KINDS)} のいずれか。text は日本語で1-2文、事実のみ。\n\n"
+        "以下の凝縮済み会話を読み、既存の設計書に載りにくい会話固有の事実だけを抽出してください。\n"
+        "出力は次の形の JSON オブジェクトだけにすること。"
+        "マークダウンのコードフェンス(```)で囲まず、前後に説明文を付けない。\n"
+        '{"findings": [{"kind": "<種別>", "text": "<日本語1-2文の事実>", "confidence": <0から1の数値>}]}\n'
+        f"kind は次のいずれか: {sorted(VALID_KINDS)}。"
+        "トップレベルのキー名は必ず findings にする。"
+        "該当が無ければ findings は空配列にする。\n\n"
         f"--- 会話: {condensed.title or '(無題)'} ---\n{condensed.body}\n"
     )
 
