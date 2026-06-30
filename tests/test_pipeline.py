@@ -75,6 +75,39 @@ def test_organize_extraction_failure(tmp_path, write_jsonl):
     assert summary["skipped"].get("extract_failed", 0) == 1
 
 
+def test_organize_missing_transcript_does_not_abort(tmp_path, write_jsonl):
+    scan = tmp_path / "scan"; (scan / "enc").mkdir(parents=True)
+    proj = tmp_path / "projects"; (proj / "Webs" / "portfolio").mkdir(parents=True)
+    cwd = str(proj / "Webs" / "portfolio")
+    # two transcripts; the first one is deleted after the scan snapshot but
+    # before condense runs (simulated by patching iter_conversations below)
+    rows = [{"type": "user", "cwd": cwd, "timestamp": "2026-06-25T00:00:00Z",
+             "message": {"role": "user", "content": "ポートフォリオの要件はAとB。"*5}}]
+    good = scan / "enc" / "good.jsonl"
+    os.replace(write_jsonl("good.jsonl", rows), good)
+    # a meta pointing at a path that does not exist on disk
+    from transcript_organizer.models import ConvMeta
+    from transcript_organizer import pipeline as pl
+    gone = ConvMeta(path=str(scan / "enc" / "gone.jsonl"), sid="gone",
+                    cwd=cwd, first_ts="2026-06-25T00:00:00Z",
+                    last_ts="2026-06-25T00:00:00Z", nmsg=1,
+                    is_sidechain=False, basename="gone.jsonl")
+    from transcript_organizer.discover import scan_meta
+    good_meta = scan_meta(str(good))
+    cfg = _cfg(tmp_path, scan, proj)
+    prov = MockProvider([{"kind": "design_requirement", "text": "要件AとB", "confidence": 0.9}])
+    orig = pl.iter_conversations
+    pl.iter_conversations = lambda _c: iter([gone, good_meta])
+    try:
+        summary = organize(cfg, prov, now_epoch=time.time() + 10**9)
+    finally:
+        pl.iter_conversations = orig
+    # missing one is skipped, the good one still gets processed (no crash)
+    assert summary["skipped"].get("missing", 0) == 1
+    assert summary["processed"] == 1
+    assert summary["added"] == 1
+
+
 def test_status(tmp_path, write_jsonl):
     scan = tmp_path / "scan"; (scan / "enc").mkdir(parents=True)
     proj = tmp_path / "projects"; (proj / "Webs" / "portfolio").mkdir(parents=True)

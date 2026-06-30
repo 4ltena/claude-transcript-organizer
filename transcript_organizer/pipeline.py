@@ -68,7 +68,15 @@ def organize(config, provider, only_label=None, rebuild=False,
             bump("protected"); prog(idx, total); continue
         if not rebuild and ledger.is_processed(meta.sid):
             bump("ledger"); prog(idx, total); continue
-        cd = condense(meta.path, config.condense_cap)
+        try:
+            cd = condense(meta.path, config.condense_cap)
+        except OSError as e:
+            # The transcript vanished or became unreadable between the initial
+            # scan and now (e.g. its project dir was deleted mid-run). Skip this
+            # one instead of aborting the whole batch, so already-processed work
+            # stays committed and the run can finish.
+            emit(_ev("skip", meta.sid, f"missing (unreadable transcript): {e}"))
+            bump("missing"); prog(idx, total); continue
         truncated = "…[中略" in cd.body
         emit(_ev("read", meta.sid,
                  f'title={cd.title or "(untitled)"!r} cwd={cd.cwd} '
