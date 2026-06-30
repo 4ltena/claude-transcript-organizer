@@ -124,6 +124,24 @@ def test_plan_deletion_uses_scan_cache(tmp_path, write_jsonl, monkeypatch):
     assert os.path.isfile(os.path.join(cfg.data_dir, "scan_cache.json"))
 
 
+def test_execute_drops_ledger_entries(tmp_path, write_jsonl):
+    cfg, scan = _setup(tmp_path, write_jsonl)
+    lpath = os.path.join(cfg.data_dir, "ledger.json")
+    assert Ledger(lpath).is_processed("aaa")
+    plan = plan_deletion(cfg, now_epoch=time.time() + 10**9)
+    execute(plan, cfg, yes=True)
+    # moved to trash → its ledger entry is removed in sync
+    assert not Ledger(lpath).is_processed("aaa")
+
+
+def test_dry_run_keeps_ledger(tmp_path, write_jsonl):
+    cfg, scan = _setup(tmp_path, write_jsonl)
+    lpath = os.path.join(cfg.data_dir, "ledger.json")
+    plan = plan_deletion(cfg, now_epoch=time.time() + 10**9)
+    execute(plan, cfg, yes=False)               # dry-run moves nothing
+    assert Ledger(lpath).is_processed("aaa")    # ledger untouched
+
+
 def test_execute_skips_path_outside_scan_base(tmp_path, write_jsonl):
     """execute は scan_base 外のパスをスキップする（パス封じ込めガード）。"""
     cfg, scan = _setup(tmp_path, write_jsonl)

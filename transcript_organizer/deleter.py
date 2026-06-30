@@ -77,6 +77,10 @@ def execute(plan, config, yes: bool = False) -> dict:
         dict with keys:
             "deleted": number of files actually moved (0 for dry-run)
             "would_delete": (dry-run only) number of files that would be moved
+
+    Moving a transcript to trash also drops its session from the ledger, so the
+    ledger stays in sync with the live transcript set instead of accumulating
+    orphaned entries for files that no longer exist under scan_base.
     """
     if not yes:
         return {"deleted": 0, "would_delete": len(plan["delete"])}
@@ -84,6 +88,7 @@ def execute(plan, config, yes: bool = False) -> dict:
     trash_root = os.path.join(config.data_dir, "trash", date)
     base = config.scan_base
     real_base = os.path.realpath(base)
+    ledger = Ledger(os.path.join(config.data_dir, "ledger.json"))
     moved = 0
     for path in plan["delete"]:
         if not os.path.realpath(path).startswith(real_base + os.sep):
@@ -93,6 +98,9 @@ def execute(plan, config, yes: bool = False) -> dict:
         os.makedirs(os.path.dirname(dst), exist_ok=True)
         shutil.move(path, dst)
         moved += 1
+        base_name = os.path.basename(path)
+        sid = base_name[:-6] if base_name.endswith(".jsonl") else base_name
+        ledger.drop(sid)
     return {"deleted": moved}
 
 

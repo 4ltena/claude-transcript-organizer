@@ -68,6 +68,24 @@ class Ledger:
         self._data[sid] = meta
         atomic_write_json(self.path, self._data)
 
+    def drop(self, sid: str) -> bool:
+        """Remove a session from the ledger, persisting immediately.
+
+        Used when its transcript is deleted (trashed) so the ledger stays in
+        sync with the live transcript set. Dropping an unknown id is a no-op.
+
+        Args:
+            sid: Session identifier.
+
+        Returns:
+            True if an entry was removed, False if the id was not present.
+        """
+        if sid not in self._data:
+            return False
+        del self._data[sid]
+        atomic_write_json(self.path, self._data)
+        return True
+
     def all(self) -> dict:
         """Get a copy of all processed sessions and their metadata.
 
