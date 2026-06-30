@@ -1,6 +1,6 @@
 import os
 from transcript_organizer.config import load_config
-from transcript_organizer.route import route
+from transcript_organizer.route import route, label_to_root
 
 def _cfg(tmp_path):
     proj = tmp_path / "projects"
@@ -41,3 +41,14 @@ def test_outside_projects_archive(tmp_path):
     cfg, proj = _cfg(tmp_path)
     assert route("/tmp/whatever", cfg).label == "_archive"
     assert route(None, cfg).label == "_archive"
+
+
+def test_label_to_root_roundtrips_route(tmp_path):
+    cfg, proj = _cfg(tmp_path)
+    # label_to_root is the inverse of route's label construction
+    assert label_to_root("Webs__portfolio", cfg) == str(proj / "Webs" / "portfolio")
+    assert label_to_root("AIRouter", cfg) == str(proj / "AIRouter")
+    assert label_to_root("_archive", cfg) == cfg.archive_root
+    # a real route result round-trips back to the same root
+    t = route(str(proj / "Webs" / "portfolio"), cfg)
+    assert label_to_root(t.label, cfg) == t.root

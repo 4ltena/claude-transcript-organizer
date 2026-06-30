@@ -1,5 +1,5 @@
 #!/usr/bin/env sh
-# install.sh — make tsorg / tstat / tsdel available on macOS / Linux.
+# install.sh — make tsorg / tstat / tsdel / tsren available on macOS / Linux.
 #
 # Symlinks the bin/ wrappers into a directory on PATH (default ~/.local/bin),
 # overriding via TSORG_BIN_DIR. Idempotent. Pass --uninstall (-u) to remove.
@@ -7,9 +7,9 @@ set -eu
 
 repo="$(cd "$(dirname "$0")" && pwd)"
 target="${TSORG_BIN_DIR:-$HOME/.local/bin}"
-cmds="tsorg tstat tsdel"
+cmds="tsorg tstat tsdel tsren"
 
-chmod +x "$repo/bin/tsorg" "$repo/bin/tstat" "$repo/bin/tsdel" 2>/dev/null || true
+chmod +x "$repo/bin/tsorg" "$repo/bin/tstat" "$repo/bin/tsdel" "$repo/bin/tsren" 2>/dev/null || true
 
 if [ "${1:-}" = "--uninstall" ] || [ "${1:-}" = "-u" ]; then
     for c in $cmds; do

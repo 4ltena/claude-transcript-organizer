@@ -27,6 +27,12 @@ def test_delete_default_is_dry_run(tmp_path, capsys):
     assert "dry-run" in capsys.readouterr().out.lower()
 
 
+def test_render_runs(tmp_path, capsys):
+    rc = cli.main(["render", "--config", _cfg(tmp_path)])
+    assert rc == 0
+    assert "再描画" in capsys.readouterr().out
+
+
 def _stub_deleter(monkeypatch):
     """Replace deleter funcs with recorders; return a calls dict."""
     calls = {"plan": 0, "execute": [], "gc": 0}

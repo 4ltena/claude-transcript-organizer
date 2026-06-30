@@ -2,7 +2,7 @@
 <#
 .SYNOPSIS
   Add this repository's bin/ directory to the user PATH so that
-  tsorg / tstat / tsdel can be invoked from any directory.
+  tsorg / tstat / tsdel / tsren can be invoked from any directory.
 
 .DESCRIPTION
   Idempotent: re-running never duplicates the entry. The current
@@ -55,7 +55,7 @@ if (($env:Path -split ';') -notcontains $bin) {
     $env:Path = $env:Path.TrimEnd(';') + ';' + $bin
 }
 
-# tstat / tsdel and the Windows-native tsorg need python on PATH.
+# tstat / tsdel / tsren and the Windows-native tsorg need python on PATH.
 if (-not (Get-Command python -ErrorAction SilentlyContinue)) {
     Write-Warning 'python was not found on PATH. Install Python 3.9+ for the Windows-native commands.'
 }

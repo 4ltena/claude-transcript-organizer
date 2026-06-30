@@ -1,0 +1,17 @@
+#!/usr/bin/env bash
+# tsren - render wrapper for macOS / Linux (and WSL).
+# Re-renders HANDOFF from saved findings (no LLM), so it always runs native.
+set -euo pipefail
+src="${BASH_SOURCE[0]:-$0}"
+# Resolve through symlinks (install.sh links this onto PATH).
+while [ -h "$src" ]; do
+    dir="$(cd -P "$(dirname "$src")" && pwd)"
+    src="$(readlink "$src")"
+    case "$src" in /*) ;; *) src="$dir/$src" ;; esac
+done
+here="$(cd -P "$(dirname "$src")" && pwd)"
+repo="$(dirname "$here")"
+config="$repo/config.json"
+[ -f "$repo/config.local.json" ] && config="$repo/config.local.json"
+export PYTHONUTF8=1
+exec python3 "$repo/cli.py" render --config "$config" "$@"

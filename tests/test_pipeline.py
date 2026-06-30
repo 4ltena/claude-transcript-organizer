@@ -1,7 +1,9 @@
 import os, json, time
 from transcript_organizer.config import load_config
 from transcript_organizer.providers.base import MockProvider
-from transcript_organizer.pipeline import organize, status, current_protect
+from transcript_organizer.pipeline import organize, status, current_protect, render
+from transcript_organizer.findings import FindingStore
+from transcript_organizer.models import Finding
 
 
 def _cfg(tmp_path, scan, proj):
@@ -195,6 +197,71 @@ def test_status_reuses_scan_cache_without_writing(tmp_path, write_jsonl, monkeyp
     status(cfg)
     assert calls == []                                   # cache hit, no rescans
     assert os.path.getmtime(cache_file) == mtime_before  # status does not write
+
+
+def _seed_finding(cfg, label, text="要件AとB"):
+    FindingStore(cfg.data_dir).merge(label, [Finding(
+        kind="design_requirement", text=text, confidence=0.9,
+        source="src", src_ts="2026-06-25T00:00:00Z", label=label)])
+
+
+def test_render_writes_handoff_from_findings(tmp_path):
+    scan = tmp_path / "scan"; scan.mkdir()
+    proj = tmp_path / "projects"; (proj / "Webs" / "portfolio").mkdir(parents=True)
+    cfg = _cfg(tmp_path, scan, proj)
+    _seed_finding(cfg, "Webs__portfolio")
+    # findings exist but no HANDOFF yet (e.g. organize was interrupted before render)
+    r = render(cfg)
+    ho = proj / "Webs" / "portfolio" / "docs" / "HANDOFF.md"
+    assert ho.is_file()
+    assert "要件AとB" in ho.read_text(encoding="utf-8")
+    assert r["rendered"] == 1
+    assert ho.as_posix() in [p.replace("\\", "/") for p in r["handoffs"]]
+
+
+def test_render_project_filter(tmp_path):
+    scan = tmp_path / "scan"; scan.mkdir()
+    proj = tmp_path / "projects"
+    (proj / "Webs" / "portfolio").mkdir(parents=True)
+    (proj / "AIRouter").mkdir(parents=True)
+    cfg = _cfg(tmp_path, scan, proj)
+    _seed_finding(cfg, "Webs__portfolio")
+    _seed_finding(cfg, "AIRouter")
+    r = render(cfg, only_label="AIRouter")
+    assert r["rendered"] == 1
+    assert (proj / "AIRouter" / "docs" / "HANDOFF.md").is_file()
+    assert not (proj / "Webs" / "portfolio" / "docs" / "HANDOFF.md").exists()
+
+
+def test_render_dry_run_writes_nothing(tmp_path):
+    scan = tmp_path / "scan"; scan.mkdir()
+    proj = tmp_path / "projects"; (proj / "Webs" / "portfolio").mkdir(parents=True)
+    cfg = _cfg(tmp_path, scan, proj)
+    _seed_finding(cfg, "Webs__portfolio")
+    r = render(cfg, dry_run=True)
+    assert r["handoffs"] == []
+    assert not (proj / "Webs" / "portfolio" / "docs" / "HANDOFF.md").exists()
+
+
+def test_render_skips_missing_root(tmp_path):
+    scan = tmp_path / "scan"; scan.mkdir()
+    proj = tmp_path / "projects"; proj.mkdir()
+    cfg = _cfg(tmp_path, scan, proj)
+    _seed_finding(cfg, "Ghost")              # proj/Ghost does not exist
+    r = render(cfg)
+    assert r["rendered"] == 0
+    assert r["skipped"].get("missing_root", 0) == 1
+    assert not (proj / "Ghost" / "docs" / "HANDOFF.md").exists()
+
+
+def test_render_skips_empty_findings(tmp_path):
+    scan = tmp_path / "scan"; scan.mkdir()
+    proj = tmp_path / "projects"; (proj / "Webs" / "portfolio").mkdir(parents=True)
+    cfg = _cfg(tmp_path, scan, proj)
+    FindingStore(cfg.data_dir).merge("Webs__portfolio", [])   # writes an empty []
+    r = render(cfg)
+    assert r["rendered"] == 0
+    assert r["skipped"].get("empty", 0) == 1
 
 
 def test_current_protect(tmp_path):

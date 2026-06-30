@@ -81,6 +81,9 @@ def build_parser():
     s.add_argument("--config")
     d = sub.add_parser("delete", help="処理済み会話をtrashへ退避（既定dry-run）")
     d.add_argument("--config"); d.add_argument("--project"); d.add_argument("--yes", action="store_true")
+    r = sub.add_parser("render", help="保存済みfindingsからHANDOFFを再描画（LLM不使用）")
+    r.add_argument("--config"); r.add_argument("--project")
+    r.add_argument("--dry-run", action="store_true")
     return p
 
 def main(argv=None) -> int:
@@ -122,6 +125,13 @@ def main(argv=None) -> int:
         res = deleter.execute(plan, cfg, yes=True)
         deleter.gc_trash(cfg)
         print(f"削除(trash退避): {res['deleted']}件 / 保護: {plan['protect']}")
+        return 0
+    if args.cmd == "render":
+        r = pipeline.render(cfg, only_label=args.project, dry_run=args.dry_run)
+        print(f"再描画: {r['rendered']}件 / HANDOFF: {len(r['handoffs'])}件 / "
+              f"スキップ: {r['skipped']}")
+        if args.dry_run:
+            print("（dry-run: 書き込みなし）")
         return 0
     return 1
 

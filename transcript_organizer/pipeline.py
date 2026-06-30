@@ -2,7 +2,7 @@ import os, time
 from collections import Counter
 from .discover import iter_conversations, classify, ScanCache
 from .condense import condense
-from .route import route
+from .route import route, label_to_root
 from .ledger import Ledger
 from .findings import FindingStore
 from .render import render_markdown, update_handoff
@@ -176,3 +176,52 @@ def status(config) -> dict:
                 labels[fn[:-5]] = len(store.load(fn[:-5]))
     return {"unprocessed": unprocessed, "ledger": len(ledger.all()),
             "labels": labels}
+
+
+def render(config, only_label=None, dry_run=False) -> dict:
+    """Re-render HANDOFF blocks from persisted findings, without the LLM.
+
+    Recovers HANDOFFs that organize never wrote (interrupted before its final
+    render step) or left stale. Each label's output root is recovered from the
+    label via route.label_to_root. A label whose root directory no longer
+    exists is skipped ("missing_root") rather than recreated.
+
+    Args:
+        config: Config object.
+        only_label: If set, render this label only.
+        dry_run: If True, count what would be rendered but write nothing.
+
+    Returns:
+        dict with keys: rendered, handoffs, skipped.
+    """
+    store = FindingStore(config.data_dir)
+    fdir = os.path.join(config.data_dir, "findings")
+    skipped: dict[str, int] = {}
+    handoffs: list[str] = []
+    rendered = 0
+
+    def bump(flag: str) -> None:
+        skipped[flag] = skipped.get(flag, 0) + 1
+
+    if not os.path.isdir(fdir):
+        return {"rendered": 0, "handoffs": [], "skipped": skipped}
+
+    for fn in sorted(os.listdir(fdir)):
+        if not fn.endswith(".json"):
+            continue
+        label = fn[:-5]
+        if only_label and label != only_label:
+            continue
+        records = store.load(label)
+        if not records:
+            bump("empty"); continue
+        root = label_to_root(label, config)
+        if not os.path.isdir(root):
+            bump("missing_root"); continue
+        rendered += 1
+        if dry_run:
+            continue
+        block = render_markdown(records, label, _date())
+        handoffs.append(update_handoff(root, block))
+
+    return {"rendered": rendered, "handoffs": handoffs, "skipped": skipped}
