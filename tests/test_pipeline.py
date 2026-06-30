@@ -97,7 +97,7 @@ def test_organize_missing_transcript_does_not_abort(tmp_path, write_jsonl):
     cfg = _cfg(tmp_path, scan, proj)
     prov = MockProvider([{"kind": "design_requirement", "text": "要件AとB", "confidence": 0.9}])
     orig = pl.iter_conversations
-    pl.iter_conversations = lambda _c: iter([gone, good_meta])
+    pl.iter_conversations = lambda _c, _cache=None: iter([gone, good_meta])
     try:
         summary = organize(cfg, prov, now_epoch=time.time() + 10**9)
     finally:
@@ -106,6 +106,28 @@ def test_organize_missing_transcript_does_not_abort(tmp_path, write_jsonl):
     assert summary["skipped"].get("missing", 0) == 1
     assert summary["processed"] == 1
     assert summary["added"] == 1
+
+
+def test_organize_uses_scan_cache(tmp_path, write_jsonl, monkeypatch):
+    scan = tmp_path / "scan"; (scan / "enc").mkdir(parents=True)
+    proj = tmp_path / "projects"; (proj / "Webs" / "portfolio").mkdir(parents=True)
+    rows = [{"type": "user", "cwd": str(proj / "Webs" / "portfolio"),
+             "timestamp": "2026-06-25T00:00:00Z",
+             "message": {"role": "user", "content": "ポートフォリオの要件はAとB。"*5}}]
+    src = write_jsonl("sess.jsonl", rows)
+    os.replace(src, scan / "enc" / "sess.jsonl")
+    cfg = _cfg(tmp_path, scan, proj)
+    prov = MockProvider([{"kind": "design_requirement", "text": "要件AとB", "confidence": 0.9}])
+    import transcript_organizer.discover as discover
+    calls = []
+    real = discover.scan_meta
+    monkeypatch.setattr(discover, "scan_meta",
+                        lambda p: (calls.append(p) or real(p)))
+    organize(cfg, prov, now_epoch=time.time() + 10**9)
+    organize(cfg, prov, now_epoch=time.time() + 10**9)
+    # cache persisted, and the unchanged transcript is scanned only once total
+    assert os.path.isfile(os.path.join(cfg.data_dir, "scan_cache.json"))
+    assert len(calls) == 1
 
 
 def test_status(tmp_path, write_jsonl):

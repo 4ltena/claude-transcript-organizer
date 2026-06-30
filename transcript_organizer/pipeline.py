@@ -1,6 +1,6 @@
 import os, time
 from collections import Counter
-from .discover import iter_conversations, classify
+from .discover import iter_conversations, classify, ScanCache
 from .condense import condense
 from .route import route
 from .ledger import Ledger
@@ -61,7 +61,9 @@ def organize(config, provider, only_label=None, rebuild=False,
     def bump(flag: str) -> None:
         skipped[flag] = skipped.get(flag, 0) + 1
 
-    metas = list(iter_conversations(config))
+    scan_cache = ScanCache(os.path.join(config.data_dir, "scan_cache.json"))
+    metas = list(iter_conversations(config, scan_cache))
+    scan_cache.save()
     total = len(metas)
     for idx, meta in enumerate(metas, 1):
         if meta.sid in protect:

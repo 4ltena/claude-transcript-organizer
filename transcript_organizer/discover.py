@@ -1,6 +1,8 @@
 import json, os, glob, fnmatch
+from dataclasses import asdict
 from datetime import datetime, timezone
 from .models import ConvMeta
+from .ledger import atomic_write_json
 
 def scan_meta(path: str) -> ConvMeta:
     cwd = None; first_ts = last_ts = None; nmsg = 0; sidechain = False
@@ -55,8 +57,53 @@ def classify(meta: ConvMeta, body: str, config, now_epoch: float) -> set:
         flags.add("active")
     return flags
 
-def iter_conversations(config):
+class ScanCache:
+    """Cache of scan_meta() results keyed by file mtime+size.
+
+    Avoids re-reading transcripts whose content has not changed between runs.
+    The cache is rebuilt from the live file set each run: only files looked up
+    via get() during this run are carried into the saved cache, so deleted
+    files are pruned automatically. A missing or corrupt cache file is treated
+    as empty.
+    """
+
+    def __init__(self, path: str):
+        self.path = path
+        self._old: dict = {}
+        self._new: dict = {}
+        if os.path.isfile(path):
+            try:
+                with open(path, encoding="utf-8") as f:
+                    self._old = json.load(f)
+            except Exception:
+                self._old = {}
+
+    def get(self, file_path: str) -> ConvMeta:
+        """Return the (cached or freshly scanned) ConvMeta for file_path.
+
+        Raises OSError if the file vanished between glob and stat.
+        """
+        st = os.stat(file_path)
+        key = f"{st.st_mtime_ns}:{st.st_size}"
+        rec = self._old.get(file_path)
+        if rec and rec.get("key") == key:
+            meta = ConvMeta(**rec["meta"])
+        else:
+            meta = scan_meta(file_path)
+            rec = {"key": key, "meta": asdict(meta)}
+        self._new[file_path] = rec
+        return meta
+
+    def save(self) -> None:
+        atomic_write_json(self.path, self._new)
+
+
+def iter_conversations(config, cache: "ScanCache | None" = None):
     for path in glob.iglob(os.path.join(config.scan_base, "**", "*.jsonl"), recursive=True):
         if any(fnmatch.fnmatch(path, g) for g in config.exclude_globs):
             continue
-        yield scan_meta(path)
+        try:
+            yield cache.get(path) if cache else scan_meta(path)
+        except OSError:
+            # File vanished/unreadable between glob and read — skip, don't abort.
+            continue
