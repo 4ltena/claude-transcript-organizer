@@ -49,6 +49,22 @@ class _Tracer:
             self.s.write("\n")
             self.s.flush()
 
+def _confirm_delete(auto: bool) -> bool:
+    """Decide whether to run the post-organize deletion.
+
+    With auto (organize -y) the prompt is skipped and deletion proceeds.
+    Otherwise ask interactively; a non-affirmative answer or EOF (piped /
+    non-interactive stdin) means "do not delete".
+    """
+    if auto:
+        return True
+    try:
+        ans = input("処理済みトランスクリプトを削除(trash退避)しますか? [y/N]: ")
+    except EOFError:
+        return False
+    return ans.strip().lower() in ("y", "yes")
+
+
 def build_parser():
     p = argparse.ArgumentParser(prog="organize",
                                 description="Claude会話transcriptを整理しHANDOFFを更新する")
@@ -57,6 +73,8 @@ def build_parser():
     o.add_argument("--config"); o.add_argument("--provider")
     o.add_argument("--project"); o.add_argument("--rebuild", action="store_true")
     o.add_argument("--dry-run", action="store_true")
+    o.add_argument("--yes", "-y", action="store_true",
+                   help="整理後の削除確認を省き、自動でtrash退避を実行")
     o.add_argument("--verbose", "-v", action="store_true",
                    help="会話ごとの読込・凝縮・分類・抽出をstderrに逐次出力")
     s = sub.add_parser("status", help="未処理件数・findings件数を表示")
@@ -83,6 +101,12 @@ def main(argv=None) -> int:
               f"スキップ: {r['skipped']} / HANDOFF更新: {len(r['handoffs'])}件")
         if args.dry_run:
             print("（dry-run: 書き込みなし）")
+            return 0
+        if _confirm_delete(args.yes):
+            plan = deleter.plan_deletion(cfg, only_label=args.project)
+            res = deleter.execute(plan, cfg, yes=True)
+            deleter.gc_trash(cfg)
+            print(f"削除(trash退避): {res['deleted']}件 / 保護: {plan['protect']}")
         return 0
     if args.cmd == "status":
         r = pipeline.status(cfg)
