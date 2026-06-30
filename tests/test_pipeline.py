@@ -155,6 +155,27 @@ def test_organize_unexpected_error_does_not_abort(tmp_path, write_jsonl, monkeyp
     assert summary["processed"] == 1
 
 
+def test_organize_verbose_emits_traceback_on_error(tmp_path, write_jsonl, monkeypatch):
+    scan = tmp_path / "scan"; (scan / "enc").mkdir(parents=True)
+    proj = tmp_path / "projects"; (proj / "Webs" / "portfolio").mkdir(parents=True)
+    rows = [{"type": "user", "cwd": str(proj / "Webs" / "portfolio"),
+             "timestamp": "2026-06-25T00:00:00Z",
+             "message": {"role": "user", "content": "ポートフォリオの要件はAとB。"*5}}]
+    os.replace(write_jsonl("bad.jsonl", rows), scan / "enc" / "bad.jsonl")
+    cfg = _cfg(tmp_path, scan, proj)
+    prov = MockProvider([{"kind": "design_requirement", "text": "x", "confidence": 0.9}])
+    import transcript_organizer.pipeline as pl
+    def boom(meta, body, config, now):
+        raise RuntimeError("boom")
+    monkeypatch.setattr(pl, "classify", boom)
+    logs = []
+    summary = organize(cfg, prov, now_epoch=time.time() + 10**9, log=logs.append)
+    joined = "\n".join(logs)
+    assert summary["skipped"].get("error", 0) == 1
+    assert "RuntimeError: boom" in joined          # one-line summary
+    assert "Traceback (most recent call last)" in joined   # full traceback in verbose
+
+
 def test_status(tmp_path, write_jsonl):
     scan = tmp_path / "scan"; (scan / "enc").mkdir(parents=True)
     proj = tmp_path / "projects"; (proj / "Webs" / "portfolio").mkdir(parents=True)

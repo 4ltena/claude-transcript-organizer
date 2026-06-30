@@ -46,7 +46,7 @@ Scans conversations, extracts findings with the LLM, and updates `HANDOFF.md`. T
 python cli.py organize --dry-run
 ```
 
-To watch the per-conversation trace (which transcript is read, how it is classified/routed, what findings are extracted), use `--verbose` (`-v`). The trace goes to **stderr**, the final summary to **stdout**. Each line is English in the form `HH:MM:SS · event · id · detail` (event = `read` / `route` / `extract` / `skip` / `dry-run` / `handoff`). On a TTY a progress bar with a remaining count is pinned to the bottom line (`#` hashes).
+To watch the per-conversation trace (which transcript is read, how it is classified/routed, what findings are extracted), use `--verbose` (`-v`). The trace goes to **stderr**, the final summary to **stdout**. Each line is English in the form `HH:MM:SS · event · id · detail` (event = `read` / `route` / `extract` / `skip` / `dry-run` / `handoff` / `error`). If an unexpected exception kills one conversation, an `error` line is emitted and only that conversation is skipped while the batch continues (with `--verbose`, the full traceback follows). On a TTY a progress bar with a remaining count is pinned to the bottom line (`#` hashes).
 
 ```bash
 python cli.py organize --verbose

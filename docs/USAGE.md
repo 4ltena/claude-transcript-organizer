@@ -102,7 +102,7 @@ python cli.py organize -y
 
 - `処理` は今回抽出した会話数（dry-run 時はルート判定まで進んだ会話数）。
 - `新規finding` は新たに増えた finding 数。再観測した既存 finding は数えない。
-- `スキップ` の内訳キーは `ledger`（処理済み）・`active`（直近活動で保護）・`sidechain`（サブエージェントログ）・`meta`（本ツールの抽出メタ）・`trivial`（中身が薄い）・`protected`（保護指定セッション）・`other_label`（`--project` 不一致）・`extract_failed`（抽出失敗）。
+- `スキップ` の内訳キーは `ledger`（処理済み）・`active`（直近活動で保護）・`sidechain`（サブエージェントログ）・`meta`（本ツールの抽出メタ）・`trivial`（中身が薄い）・`protected`（保護指定セッション）・`other_label`（`--project` 不一致）・`extract_failed`（抽出失敗）・`missing`（走査後に消えた/読めないトランスクリプト）・`error`（想定外の例外。1件スキップしてバッチは継続）。
 - `HANDOFF更新` は書き換えた HANDOFF.md の数。
 - `--dry-run` 時は末尾に `（dry-run: 書き込みなし）` が付く。
 
@@ -118,6 +118,7 @@ python cli.py organize -y
 | `skip` | いずれかの理由で除外 | `trivial (too little content)` / `active …` / `extract_failed …` |
 | `dry-run` | `--dry-run` で抽出を省いた | `no extraction (read-only)` |
 | `handoff` | HANDOFF を更新した | `Webs__portfolio · …/docs/HANDOFF.md` |
+| `error` | 想定外の例外で1件が落ちた | `RuntimeError: …`（直後にトレースバックを字下げ出力。バッチは継続） |
 
 TTY では最下行に進捗バーが固定表示される。パイプやリダイレクト時は25件ごとに進捗行を出す。
 

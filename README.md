@@ -46,7 +46,7 @@ python cli.py organize
 python cli.py organize --dry-run
 ```
 
-処理の内訳（読込中のトランスクリプト・分類/ルート判定・抽出した findings）を逐次見たい場合は `--verbose`（`-v`）。トレースは **stderr**、最終サマリは **stdout** に出力されます。各行は英語で `HH:MM:SS · event · id · detail` 形式（event = `read`/`route`/`extract`/`skip`/`dry-run`/`handoff`）。TTY では最下行に残数つき進捗バー（`#` ハッシュ）が固定表示されます。
+処理の内訳（読込中のトランスクリプト・分類/ルート判定・抽出した findings）を逐次見たい場合は `--verbose`（`-v`）。トレースは **stderr**、最終サマリは **stdout** に出力されます。各行は英語で `HH:MM:SS · event · id · detail` 形式（event = `read`/`route`/`extract`/`skip`/`dry-run`/`handoff`/`error`）。想定外の例外で1件が落ちると `error` 行を出してその会話だけスキップし、バッチは継続します（`--verbose` 時はトレースバックも続けて出力）。TTY では最下行に残数つき進捗バー（`#` ハッシュ）が固定表示されます。
 
 ```bash
 python cli.py organize --verbose

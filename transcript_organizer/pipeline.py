@@ -1,4 +1,4 @@
-import os, time
+import os, time, traceback
 from collections import Counter
 from .discover import iter_conversations, classify, ScanCache
 from .condense import condense
@@ -49,7 +49,8 @@ def organize(config, provider, only_label=None, rebuild=False,
         dict with keys: processed, skipped, added, handoffs.
     """
     now_epoch = now_epoch if now_epoch is not None else time.time()
-    emit = log if callable(log) else (lambda _msg: None)
+    tracing = callable(log)
+    emit = log if tracing else (lambda _msg: None)
     prog = progress if callable(progress) else (lambda _d, _t: None)
     ledger = Ledger(os.path.join(config.data_dir, "ledger.json"))
     store = FindingStore(config.data_dir)
@@ -139,6 +140,10 @@ def organize(config, provider, only_label=None, rebuild=False,
             # handled extraction failure). Record it and keep going so a single
             # bad transcript can't abort the whole batch.
             emit(_ev("error", meta.sid, f"{type(e).__name__}: {e}"))
+            if tracing:
+                # In verbose mode, follow the one-line summary with the full
+                # traceback (indented) so frequent errors can be diagnosed.
+                emit("  " + traceback.format_exc().rstrip().replace("\n", "\n  "))
             bump("error")
         prog(idx, total)
 
