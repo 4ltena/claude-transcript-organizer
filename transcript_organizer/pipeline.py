@@ -65,11 +65,15 @@ def organize(config, provider, only_label=None, rebuild=False,
     metas = list(iter_conversations(config, scan_cache))
     scan_cache.save()
     total = len(metas)
-    for idx, meta in enumerate(metas, 1):
+
+    def _process(meta) -> None:
+        """Process one conversation. Any exception propagates to the per-item
+        guard in the loop, which records it as `error` and moves on."""
+        nonlocal processed, added
         if meta.sid in protect:
-            bump("protected"); prog(idx, total); continue
+            bump("protected"); return
         if not rebuild and ledger.is_processed(meta.sid):
-            bump("ledger"); prog(idx, total); continue
+            bump("ledger"); return
         try:
             cd = condense(meta.path, config.condense_cap)
         except OSError as e:
@@ -78,7 +82,7 @@ def organize(config, provider, only_label=None, rebuild=False,
             # one instead of aborting the whole batch, so already-processed work
             # stays committed and the run can finish.
             emit(_ev("skip", meta.sid, f"missing (unreadable transcript): {e}"))
-            bump("missing"); prog(idx, total); continue
+            bump("missing"); return
         truncated = "…[中略" in cd.body
         emit(_ev("read", meta.sid,
                  f'title={cd.title or "(untitled)"!r} cwd={cd.cwd} '
@@ -87,32 +91,32 @@ def organize(config, provider, only_label=None, rebuild=False,
         flags = classify(meta, cd.body, config, now_epoch)
         if "active" in flags:
             emit(_ev("skip", meta.sid, "active (recently active, protected)"))
-            bump("active"); prog(idx, total); continue
+            bump("active"); return
         if "sidechain" in flags and not config.include_sidechain:
             emit(_ev("skip", meta.sid, "sidechain (subagent log)"))
-            bump("sidechain"); prog(idx, total); continue
+            bump("sidechain"); return
         if "meta" in flags:
             emit(_ev("skip", meta.sid, "meta (this tool's own output)"))
-            bump("meta"); prog(idx, total); continue
+            bump("meta"); return
         if "trivial" in flags:
             emit(_ev("skip", meta.sid, "trivial (too little content)"))
-            bump("trivial"); prog(idx, total); continue
+            bump("trivial"); return
         tgt = route(cd.cwd, config)
         emit(_ev("route", meta.sid, f"label={tgt.label} root={tgt.root}"))
         if only_label and tgt.label != only_label:
             emit(_ev("skip", meta.sid, f"other_label (!= {only_label})"))
-            bump("other_label"); prog(idx, total); continue
+            bump("other_label"); return
         if dry_run:
             emit(_ev("dry-run", meta.sid, "no extraction (read-only)"))
             processed += 1
             touched[tgt.label] = tgt.root
-            prog(idx, total); continue
+            return
         try:
             findings = extract(cd, provider, tgt.label, config.retries)
         except ExtractionError as e:
             emit(_ev("skip", meta.sid,
                      f"extract_failed after {config.retries} retries: {e}"))
-            bump("extract_failed"); prog(idx, total); continue
+            bump("extract_failed"); return
         new = store.merge(tgt.label, findings)
         added += new
         kinds = dict(Counter(f.kind for f in findings))
@@ -126,6 +130,16 @@ def organize(config, provider, only_label=None, rebuild=False,
         })
         touched[tgt.label] = tgt.root
         processed += 1
+
+    for idx, meta in enumerate(metas, 1):
+        try:
+            _process(meta)
+        except Exception as e:
+            # One conversation hit an unexpected error (not a missing file or a
+            # handled extraction failure). Record it and keep going so a single
+            # bad transcript can't abort the whole batch.
+            emit(_ev("error", meta.sid, f"{type(e).__name__}: {e}"))
+            bump("error")
         prog(idx, total)
 
     handoffs: list[str] = []

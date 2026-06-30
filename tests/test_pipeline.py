@@ -130,6 +130,29 @@ def test_organize_uses_scan_cache(tmp_path, write_jsonl, monkeypatch):
     assert len(calls) == 1
 
 
+def test_organize_unexpected_error_does_not_abort(tmp_path, write_jsonl, monkeypatch):
+    scan = tmp_path / "scan"; (scan / "enc").mkdir(parents=True)
+    proj = tmp_path / "projects"; (proj / "Webs" / "portfolio").mkdir(parents=True)
+    cwd = str(proj / "Webs" / "portfolio")
+    rows = [{"type": "user", "cwd": cwd, "timestamp": "2026-06-25T00:00:00Z",
+             "message": {"role": "user", "content": "ポートフォリオの要件はAとB。"*5}}]
+    os.replace(write_jsonl("bad.jsonl", rows), scan / "enc" / "bad.jsonl")
+    os.replace(write_jsonl("ok.jsonl", rows), scan / "enc" / "ok.jsonl")
+    cfg = _cfg(tmp_path, scan, proj)
+    prov = MockProvider([{"kind": "design_requirement", "text": "要件AとB", "confidence": 0.9}])
+    import transcript_organizer.pipeline as pl
+    real_classify = pl.classify
+    def boom(meta, body, config, now):
+        if meta.basename == "bad.jsonl":
+            raise RuntimeError("kaboom")          # unexpected, non-OSError/Extraction
+        return real_classify(meta, body, config, now)
+    monkeypatch.setattr(pl, "classify", boom)
+    summary = organize(cfg, prov, now_epoch=time.time() + 10**9)
+    # one conversation blew up but the batch finished and processed the other
+    assert summary["skipped"].get("error", 0) == 1
+    assert summary["processed"] == 1
+
+
 def test_status(tmp_path, write_jsonl):
     scan = tmp_path / "scan"; (scan / "enc").mkdir(parents=True)
     proj = tmp_path / "projects"; (proj / "Webs" / "portfolio").mkdir(parents=True)
