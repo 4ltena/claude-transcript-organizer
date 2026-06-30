@@ -152,6 +152,28 @@ def test_status(tmp_path, write_jsonl):
     assert s1["labels"].get("Webs__portfolio", 0) == 1
 
 
+def test_status_reuses_scan_cache_without_writing(tmp_path, write_jsonl, monkeypatch):
+    scan = tmp_path / "scan"; (scan / "enc").mkdir(parents=True)
+    proj = tmp_path / "projects"; (proj / "Webs" / "portfolio").mkdir(parents=True)
+    rows = [{"type": "user", "cwd": str(proj / "Webs" / "portfolio"),
+             "timestamp": "2026-06-25T00:00:00Z",
+             "message": {"role": "user", "content": "ポートフォリオの要件はAとB。"*5}}]
+    os.replace(write_jsonl("sess.jsonl", rows), scan / "enc" / "sess.jsonl")
+    cfg = _cfg(tmp_path, scan, proj)
+    prov = MockProvider([{"kind": "design_requirement", "text": "要件AとB", "confidence": 0.9}])
+    organize(cfg, prov, now_epoch=time.time() + 10**9)   # warms cache
+    cache_file = os.path.join(cfg.data_dir, "scan_cache.json")
+    mtime_before = os.path.getmtime(cache_file)
+    import transcript_organizer.discover as discover
+    calls = []
+    real = discover.scan_meta
+    monkeypatch.setattr(discover, "scan_meta",
+                        lambda p: (calls.append(p) or real(p)))
+    status(cfg)
+    assert calls == []                                   # cache hit, no rescans
+    assert os.path.getmtime(cache_file) == mtime_before  # status does not write
+
+
 def test_current_protect(tmp_path):
     cfg = _cfg(tmp_path, tmp_path / "scan", tmp_path / "proj")
     protect = current_protect(cfg)

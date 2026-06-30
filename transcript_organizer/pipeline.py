@@ -148,8 +148,10 @@ def status(config) -> dict:
     """
     ledger = Ledger(os.path.join(config.data_dir, "ledger.json"))
     store = FindingStore(config.data_dir)
+    # Read-only reporting: reuse the scan cache for speed but do not rewrite it.
+    cache = ScanCache(os.path.join(config.data_dir, "scan_cache.json"))
     unprocessed = 0
-    for meta in iter_conversations(config):
+    for meta in iter_conversations(config, cache):
         if not ledger.is_processed(meta.sid):
             unprocessed += 1
     fdir = os.path.join(config.data_dir, "findings")

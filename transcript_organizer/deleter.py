@@ -1,5 +1,5 @@
 import os, time, shutil
-from .discover import iter_conversations, classify
+from .discover import iter_conversations, classify, ScanCache
 from .condense import condense
 from .ledger import Ledger
 from .pipeline import current_protect
@@ -38,7 +38,8 @@ def plan_deletion(config, now_epoch=None, only_label=None) -> dict:
     def bump(reason):
         protect[reason] = protect.get(reason, 0) + 1
 
-    for meta in iter_conversations(config):   # exclude_globs already applied
+    cache = ScanCache(os.path.join(config.data_dir, "scan_cache.json"))
+    for meta in iter_conversations(config, cache):   # exclude_globs already applied
         if meta.sid in protect_ids:
             bump("session_id"); continue
         if not ledger.is_processed(meta.sid):
@@ -56,6 +57,7 @@ def plan_deletion(config, now_epoch=None, only_label=None) -> dict:
             if target.label != only_label:
                 bump("other_label"); continue
         delete.append(meta.path)
+    cache.save()
     return {"delete": delete, "protect": protect}
 
 

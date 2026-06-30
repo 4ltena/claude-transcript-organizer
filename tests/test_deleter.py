@@ -109,6 +109,21 @@ def test_plan_only_label_filters(tmp_path, write_jsonl):
     assert plan["protect"].get("other_label", 0) >= 1
 
 
+def test_plan_deletion_uses_scan_cache(tmp_path, write_jsonl, monkeypatch):
+    cfg, scan = _setup(tmp_path, write_jsonl)
+    import transcript_organizer.discover as discover
+    calls = []
+    real = discover.scan_meta
+    monkeypatch.setattr(discover, "scan_meta",
+                        lambda p: (calls.append(p) or real(p)))
+    plan_deletion(cfg, now_epoch=time.time() + 10**9)   # warms + saves cache
+    n_first = len(calls)
+    assert n_first == 2                                  # both transcripts scanned
+    plan_deletion(cfg, now_epoch=time.time() + 10**9)   # reuses cache
+    assert len(calls) == n_first                         # no additional scans
+    assert os.path.isfile(os.path.join(cfg.data_dir, "scan_cache.json"))
+
+
 def test_execute_skips_path_outside_scan_base(tmp_path, write_jsonl):
     """execute は scan_base 外のパスをスキップする（パス封じ込めガード）。"""
     cfg, scan = _setup(tmp_path, write_jsonl)
