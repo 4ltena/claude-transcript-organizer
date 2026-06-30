@@ -104,6 +104,18 @@ python cli.py delete --project my-project --yes
 
 A conversation moved to trash is dropped from the ledger at the same time, so orphaned entries don't pile up and the `status` ledger count stays accurate.
 
+### 4. render
+
+When an interruption or process kill leaves findings saved but the HANDOFF un-updated, rebuild the HANDOFF from saved findings **without the LLM** (unlike `--rebuild`, this re-extracts nothing and costs nothing).
+
+```bash
+python cli.py render                       # rebuild every label's HANDOFF
+python cli.py render --project my-project   # a single label
+python cli.py render --dry-run              # just show what would be rebuilt
+```
+
+The output root is recovered from the label, so run it with the same config (`PROJECTS` root) you used for `organize`. A label whose root directory is gone is skipped (`missing_root`) rather than recreated.
+
 ---
 
 ## Installation
@@ -116,7 +128,7 @@ cd claude-transcript-organizer
 python cli.py status        # smoke test (read-only)
 ```
 
-To call `tsorg`/`tstat`/`tsdel` from any directory, put `bin/` on PATH. For the per-OS execution model and local-LLM setups, see [Shortcut commands](#shortcut-commands-tsorg--tstat--tsdel).
+To call `tsorg`/`tstat`/`tsdel`/`tsren` from any directory, put `bin/` on PATH. For the per-OS execution model and local-LLM setups, see [Shortcut commands](#shortcut-commands-tsorg--tstat--tsdel--tsren).
 
 ### Windows
 
@@ -184,15 +196,16 @@ Environment variables each provider needs:
 
 ---
 
-## Shortcut commands (tsorg / tstat / tsdel)
+## Shortcut commands (tsorg / tstat / tsdel / tsren)
 
-`bin/` ships wrappers so the commands are callable from any directory: `.cmd` for Windows and extensionless shell scripts (`tsorg`/`tstat`/`tsdel`) for macOS/Linux. They share names, so once `bin/` is on PATH the same command name works on every OS.
+`bin/` ships wrappers so the commands are callable from any directory: `.cmd` for Windows and extensionless shell scripts (`tsorg`/`tstat`/`tsdel`/`tsren`) for macOS/Linux. They share names, so once `bin/` is on PATH the same command name works on every OS.
 
 | command | equivalent |
 |---------|------------|
 | `tsorg` | `python cli.py organize …` |
 | `tstat` | `python cli.py status` |
 | `tsdel` | `python cli.py delete` |
+| `tsren` | `python cli.py render` |
 
 `tsorg` adds `--verbose` by default. The Windows `.cmd` version switches execution target based on which config file exists next to the repo (adaptive):
 
@@ -201,7 +214,7 @@ Environment variables each provider needs:
 
 The posix version has no such branch: it always runs `python3`, reading `config.local.json` if present, otherwise `config.json`.
 
-Both config files are gitignored and optional. The Windows `tstat`/`tsdel` use no LLM, so they always run on the Windows side. Arguments are forwarded as-is, and since the last one wins you can override the provider for a single run.
+Both config files are gitignored and optional. The Windows `tstat`/`tsdel`/`tsren` use no LLM, so they always run on the Windows side. Arguments are forwarded as-is, and since the last one wins you can override the provider for a single run.
 
 ```bat
 tsorg                              :: runs with the provider from config.(wsl|local).json
@@ -212,6 +225,7 @@ tsorg --project my-project
 tstat
 tsdel
 tsdel --yes
+tsren                              :: rebuild HANDOFF from findings (no LLM)
 ```
 
 #### Windows-native (`config.local.json`)

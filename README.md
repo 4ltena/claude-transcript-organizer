@@ -104,6 +104,18 @@ python cli.py delete --project my-project --yes
 
 trash へ退避した会話は、台帳からも同時に取り除きます。実体のない孤児エントリが台帳に溜まらず、`status` の台帳件数も実状に合います。
 
+### 4. 再描画 (render)
+
+中断やプロセス kill で「findings は保存済みだが HANDOFF が未更新」のまま残ったときに、保存済み findings から HANDOFF を **LLM なしで**作り直します（`--rebuild` の再抽出と違い課金は伴いません）。
+
+```bash
+python cli.py render                       # 全ラベルの HANDOFF を再生成
+python cli.py render --project my-project   # 1ラベルだけ
+python cli.py render --dry-run              # 対象を確認するだけ
+```
+
+出力先はラベルから逆算します。`organize` と同じ設定（`PROJECTS` ルート）で実行してください。ルートのディレクトリが無いラベルは `missing_root` でスキップし、削除済みプロジェクトを作り直しません。
+
 ---
 
 ## インストール
@@ -116,7 +128,7 @@ cd claude-transcript-organizer
 python cli.py status        # 動作確認（読み取りのみ）
 ```
 
-`tsorg`/`tstat`/`tsdel` をどのディレクトリからでも呼べるようにするには、`bin/` を PATH に通します。OS ごとの実行の仕組みやローカル LLM の構成例は[短縮コマンド](#短縮コマンド-tsorg--tstat--tsdel)を参照してください。
+`tsorg`/`tstat`/`tsdel`/`tsren` をどのディレクトリからでも呼べるようにするには、`bin/` を PATH に通します。OS ごとの実行の仕組みやローカル LLM の構成例は[短縮コマンド](#短縮コマンド-tsorg--tstat--tsdel--tsren)を参照してください。
 
 ### Windows
 
@@ -184,15 +196,16 @@ python cli.py organize --provider ollama      # ローカル; APIキー不要
 
 ---
 
-## 短縮コマンド (tsorg / tstat / tsdel)
+## 短縮コマンド (tsorg / tstat / tsdel / tsren)
 
-任意のディレクトリから手軽に呼べるよう、`bin/` にラッパーを同梱しています。Windows 用は `.cmd`、macOS/Linux 用は拡張子なしのシェルスクリプト（`tsorg`/`tstat`/`tsdel`）で、同名のため PATH を通せばどの OS でも同じコマンド名で動きます。
+任意のディレクトリから手軽に呼べるよう、`bin/` にラッパーを同梱しています。Windows 用は `.cmd`、macOS/Linux 用は拡張子なしのシェルスクリプト（`tsorg`/`tstat`/`tsdel`/`tsren`）で、同名のため PATH を通せばどの OS でも同じコマンド名で動きます。
 
 | コマンド | 等価 |
 |---------|------|
 | `tsorg` | `python cli.py organize …` |
 | `tstat` | `python cli.py status` |
 | `tsdel` | `python cli.py delete` |
+| `tsren` | `python cli.py render` |
 
 `tsorg` は `--verbose` を既定で付与します。Windows の `.cmd` 版はリポジトリ直下の設定ファイルの有無で実行先を切り替えます（アダプティブ）。
 
@@ -201,7 +214,7 @@ python cli.py organize --provider ollama      # ローカル; APIキー不要
 
 macOS/Linux の posix 版はこの分岐を持たず、常に `python3` で実行し、`config.local.json` があればそれを、無ければ `config.json` を読みます。
 
-いずれの設定ファイルも `.gitignore` 済みで任意。Windows の `tstat`/`tsdel` は LLM を使わないため常に Windows 側で実行します。
+いずれの設定ファイルも `.gitignore` 済みで任意。Windows の `tstat`/`tsdel`/`tsren` は LLM を使わないため常に Windows 側で実行します。
 
 - **`--verbose`** で会話ごとの処理トレース（英語 `HH:MM:SS · event · id · detail` 形式＋最下行の進捗バー）を **stderr** に、最終サマリを **stdout** に出力します。
 
@@ -216,6 +229,7 @@ tsorg --project my-project
 tstat
 tsdel
 tsdel --yes
+tsren                              ← findings から HANDOFF を再描画（LLM 不使用）
 ```
 
 #### Windows ネイティブで使う場合（`config.local.json`）
