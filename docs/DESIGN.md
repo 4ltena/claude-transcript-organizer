@@ -40,7 +40,7 @@ transcript_organizer/
 | `route.py` | `route(cwd, config) -> Target` |
 | `extract.py` | `extract(condensed, provider, label, retries=2) -> list[Finding]` / `FINDINGS_SCHEMA` / `VALID_KINDS` |
 | `findings.py` | `FindingStore(data_dir).load/merge` / `normalize_id(kind, text) -> str` |
-| `ledger.py` | `Ledger(path).is_processed/mark/all` / `atomic_write_json(path, obj)` |
+| `ledger.py` | `Ledger(path).is_processed/mark/drop/all` / `atomic_write_json(path, obj)` |
 | `render.py` | `render_markdown(records, label, date) -> str` / `update_handoff(root, block) -> str` |
 | `deleter.py` | `plan_deletion(config, now_epoch, only_label) -> dict` / `execute(plan, config, yes) -> dict` / `gc_trash(config, now_epoch) -> int` |
 | `pipeline.py` | `organize(config, provider, ...) -> dict` / `status(config) -> dict` / `current_protect(config) -> set` |
@@ -83,13 +83,15 @@ flowchart TD
 4. dry-run でなければ、`touched` の各ラベルについて findings を読み直し、`render_markdown` でブロックを作り、`update_handoff` で HANDOFF を更新する。
 5. `{"processed", "skipped", "added", "handoffs"}` を返す。
 
+CLI（`cli.py`）の `organize` は、dry-run でなければ整理の後に削除するか確認する。`y` または `--yes`（`-y`）なら `plan_deletion` → `execute(yes=True)` → `gc_trash` を続けて呼ぶ。非対話（EOF）や否定回答なら削除しない。
+
 ### status の手順
 
 `pipeline.status` は書き込みをしない。`iter_conversations` を回して台帳に無い会話を数え（未処理件数）、台帳エントリ数を数え、`data/findings/*.json` をラベルごとに読んで件数を集計する。戻り値は `{"unprocessed", "ledger", "labels"}`。未処理件数には保護対象（active 等）も含まれるため、実際に organize される数とは一致しないことがある。
 
 ### delete の手順
 
-`deleter.plan_deletion` が削除候補と保護内訳を決め、`execute` が実体を trash へ移動し、`gc_trash` が古い退避を掃除する。詳細は後述の「削除の安全モデル」を参照。
+`deleter.plan_deletion` が削除候補と保護内訳を決め、`execute` が実体を trash へ移動し、`gc_trash` が古い退避を掃除する。`execute` は trash へ移したファイルの sid を `ledger.drop` で台帳からも除き、台帳を実在する会話と同期させる（孤児エントリを残さない）。詳細は後述の「削除の安全モデル」を参照。
 
 ## データモデルと永続フォーマット
 
@@ -119,7 +121,7 @@ Finding(kind, text, confidence, source, src_ts, label)
 }
 ```
 
-`is_processed` の真偽が差分処理の核。抽出が成功して初めて `mark` され、原子的に書き戻される。抽出失敗時は書かれないため、再実行で再び対象になる。
+`is_processed` の真偽が差分処理の核。抽出が成功して初めて `mark` され、原子的に書き戻される。抽出失敗時は書かれないため、再実行で再び対象になる。会話を trash へ退避すると `drop` でエントリを取り除き、台帳を実在する会話と同期させる（孤児エントリを残さない）。
 
 ### findings `data/findings/<label>.json`
 
@@ -293,7 +295,7 @@ Finding(kind, text, confidence, source, src_ts, label)
 
 ここを通過したものだけが削除候補になる。台帳に記録された＝抽出済みの会話しか消えないことが、findings を取り損ねない保証になる。
 
-`execute` は `yes=False` なら何も動かさず候補数だけ返す。`yes=True` のときは候補を `data/trash/<日付>/` へ `shutil.move` する。移動前に各パスが `scan_base` 配下にあることを実パスで再確認し、範囲外はスキップする。`gc_trash` は `trash_retention_days` を過ぎた日付ディレクトリを mtime 基準で削除する。
+`execute` は `yes=False` なら何も動かさず候補数だけ返す。`yes=True` のときは候補を `data/trash/<日付>/` へ `shutil.move` し、移したファイルの sid を `ledger.drop` で台帳からも除く。移動前に各パスが `scan_base` 配下にあることを実パスで再確認し、範囲外はスキップする。`gc_trash` は `trash_retention_days` を過ぎた日付ディレクトリを mtime 基準で削除する。
 
 ## 不変条件と拡張点
 

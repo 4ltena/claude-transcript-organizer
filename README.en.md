@@ -75,6 +75,12 @@ Reprocess conversations already in the ledger (to rebuild a lost HANDOFF):
 python cli.py organize --rebuild
 ```
 
+When organizing finishes, it asks whether to delete (move to trash) next. Answer `y` to run the equivalent of `delete --yes`; anything else deletes nothing. Pass `--yes` (`-y`) to skip the prompt and trash automatically. With `--dry-run` it never asks.
+
+```bash
+python cli.py organize -y        # organize, then delete in one go
+```
+
 ### 2. status
 
 ```bash
@@ -95,6 +101,8 @@ python cli.py delete --yes
 # restrict to a single project
 python cli.py delete --project my-project --yes
 ```
+
+A conversation moved to trash is dropped from the ledger at the same time, so orphaned entries don't pile up and the `status` ledger count stays accurate.
 
 ---
 
@@ -198,6 +206,7 @@ Both config files are gitignored and optional. The Windows `tstat`/`tsdel` use n
 ```bat
 tsorg                              :: runs with the provider from config.(wsl|local).json
 tsorg --dry-run
+tsorg -y                           :: organize, then delete with no prompt
 tsorg --provider anthropic         :: override for this run only
 tsorg --project my-project
 tstat
@@ -311,6 +320,9 @@ If `HANDOFF.md` contains the marker block below, only the content inside it is r
 | **recent-session protection** | Files modified within `protect_recent_minutes` (default 30 min) are excluded. |
 | **protect_session_ids** | Session IDs listed in config are always protected. |
 | **trash retention** | Not deleted immediately but moved to `data/trash/`; GC'd after `delete.trash_retention_days` (default 14 days). |
+| **ledger sync** | A conversation moved to trash is dropped from the ledger, so orphaned entries don't accumulate. |
+
+`organize` (`tsorg`) asks whether to delete once it finishes; `-y` skips the prompt. See [organize](#1-organize) for details.
 
 ---
 
